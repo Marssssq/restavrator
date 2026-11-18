@@ -2969,7 +2969,8 @@ public class LuaBootstrapper : MonoBehaviour
             }
             else
             {
-                playerRT.anchoredPosition = playerPos;
+                float idleBreathing = Mathf.Sin(Time.time * 2.4f) * 1.6f;
+                playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + idleBreathing);
                 if (!string.IsNullOrEmpty(pendingStation))
                 {
                     string st = pendingStation;
@@ -2982,6 +2983,7 @@ public class LuaBootstrapper : MonoBehaviour
             {
                 markerAlpha = Mathf.Max(0f, markerAlpha - dt * 2.2f);
                 clickMarkerRT.GetComponent<Image>().color = new Color(1f, 0.88f, 0.35f, markerAlpha * 0.7f);
+                clickMarkerRT.localScale = Vector3.one * (1.3f - markerAlpha * 0.3f);
             }
         }
         else if (viewState == "WORKBENCH")
