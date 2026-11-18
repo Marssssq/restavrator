@@ -185,6 +185,7 @@ public class LuaBootstrapper : MonoBehaviour
     }
     private List<SparkParticle> sparks = new List<SparkParticle>();
     private float sparkSpawnTimer = 0f;
+    private float gemGleamTimer = 1.5f;
 
     private Text modalTitle, modalBody, modalBtn1Text, modalBtn2Text, modalSealText;
     private Button modalBtn1, modalBtn2;
@@ -3165,6 +3166,23 @@ public class LuaBootstrapper : MonoBehaviour
                     else
                     {
                         toolCursorGO.SetActive(false);
+                    }
+                }
+
+                if (activeOrder != null)
+                {
+                    Vector2 gemPos = (activeOrder.shapeType == "RING") ? new Vector2(0f, 47f) : Vector2.zero;
+                    float dGem = Vector2.Distance(localPt, gemPos);
+                    if (dGem < 45f && cleanProgress > 30)
+                    {
+                        gemGleamTimer -= dt;
+                        if (gemGleamTimer <= 0f)
+                        {
+                            gemGleamTimer = Random.Range(2.0f, 3.5f);
+                            Color gleamCol = (activeOrder.shapeType == "RING") ? new Color(1f, 0.55f, 0.55f, 0.95f) : ((activeOrder.shapeType == "DIAMOND") ? new Color(0.80f, 0.95f, 1f, 0.95f) : new Color(0.55f, 0.75f, 1f, 0.95f));
+                            EmitSparks(gemPos, 2, gleamCol);
+                            PlaySFX(clipCrystalChime, 0.16f, Random.Range(1.6f, 2.0f));
+                        }
                     }
                 }
 
