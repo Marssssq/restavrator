@@ -3064,7 +3064,12 @@ public class LuaBootstrapper : MonoBehaviour
                 {
                     AudioClip targetLoop = (activeBenchAction == "GRIND") ? clipGrindLoop : clipCleanLoop;
                     if (toolLoopSource.clip != targetLoop) toolLoopSource.clip = targetLoop;
-                    toolLoopSource.pitch = (activeBenchAction == "GRIND") ? Mathf.Lerp(0.85f, 1.35f, speedRatio) : 1.0f;
+                    if (activeBenchAction == "GRIND")
+                        toolLoopSource.pitch = Mathf.Lerp(0.85f, 1.38f, speedRatio);
+                    else if (activeBenchAction == "CLEAN")
+                        toolLoopSource.pitch = (speedRatio > (upgStabilizer ? 0.86f : 0.72f)) ? 1.45f : Mathf.Lerp(0.88f, 1.15f, speedRatio / 0.72f);
+                    else
+                        toolLoopSource.pitch = 1.0f;
                     if (!toolLoopSource.isPlaying) toolLoopSource.Play();
                 }
                 else if (toolLoopSource.isPlaying)
