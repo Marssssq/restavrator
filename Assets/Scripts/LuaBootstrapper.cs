@@ -53,6 +53,7 @@ public class LuaBootstrapper : MonoBehaviour
     private bool twistChecked = false;
 
     private List<string> historyLog = new List<string>();
+    private List<string> completedOrderTypes = new List<string>();
     private List<Texture2D> createdTextures = new List<Texture2D>();
     private List<AudioClip> createdClips = new List<AudioClip>();
 
@@ -1407,9 +1408,21 @@ public class LuaBootstrapper : MonoBehaviour
         byzantineOrder.diagnostics.Add(new DiagZone(30, 10, 46, "Лучи энколпиона: Зазубрины на торцах. Требуется Ювелирный микро-шпатель."));
         byzantineOrder.diagnostics.Add(new DiagZone(0, -35, 46, "Крепление сапфира: 4 штифта требуют серии предельно быстрых кликов без задержек."));
 
-        currentWindowChoices.Add(ringOrder);
-        currentWindowChoices.Add(diamondOrder);
-        currentWindowChoices.Add(qualificationRank >= 3 ? byzantineOrder : royalOrder);
+        List<OrderData> availableMasterpieces = new List<OrderData>();
+        if (!completedOrderTypes.Contains("RING")) availableMasterpieces.Add(ringOrder);
+        if (!completedOrderTypes.Contains("DIAMOND")) availableMasterpieces.Add(diamondOrder);
+        if (!completedOrderTypes.Contains("LOCKET")) availableMasterpieces.Add(royalOrder);
+        if (!completedOrderTypes.Contains("CROSS")) availableMasterpieces.Add(byzantineOrder);
+
+        for (int i = 0; i < availableMasterpieces.Count && currentWindowChoices.Count < 3; i++)
+            currentWindowChoices.Add(availableMasterpieces[i]);
+
+        int cheapIdx = 1;
+        while (currentWindowChoices.Count < 3)
+        {
+            currentWindowChoices.Add(CreateCheapOrder(cheapIdx));
+            cheapIdx++;
+        }
     }
 
     private OrderData CreateCheapOrder(int idx)
@@ -2835,6 +2848,7 @@ public class LuaBootstrapper : MonoBehaviour
             money = 400;
             secretViolated = false;
             completedOrdersCount = 0;
+            completedOrderTypes.Clear();
             upgPrecisionBits = false;
             upgStabilizer = false;
             qualificationRank = 1;
@@ -2915,6 +2929,7 @@ public class LuaBootstrapper : MonoBehaviour
         else if (isRuinedToZero || chemicalStain || wrongToolScratches || overScrubDamage > 45f) story = activeOrder.histSpecial;
 
         historyLog.Add($"■ {activeOrder.title}\nИтог: {story} (Выплата: {pay} руб.)");
+        completedOrderTypes.Add(activeOrder.shapeType);
 
         modalSealGO.SetActive(true);
         if (isRuinedToZero)
