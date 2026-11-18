@@ -61,7 +61,8 @@ public class LuaBootstrapper : MonoBehaviour
     // =========================================================================
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail;
+    private AudioSource ambientSource;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick;
 
     // =========================================================================
     // СТРУКТУРЫ ДАННЫХ И КЛИК-УЗЛОВ С ТАЙМЕРОМ СБРОСА
@@ -92,6 +93,18 @@ public class LuaBootstrapper : MonoBehaviour
 
     private const float CLICK_RESET_TIME = 0.65f; // Если медлить > 0.65 сек, узел собирается обратно до 5
     private List<ClickNode> activeClickNodes = new List<ClickNode>();
+
+    private class DustMote
+    {
+        public RectTransform rt;
+        public Image img;
+        public Vector2 basePos;
+        public float speedX;
+        public float speedY;
+        public float phase;
+        public float radius;
+    }
+    private List<DustMote> dustMotes = new List<DustMote>();
 
     private class OrderData
     {
@@ -235,6 +248,11 @@ public class LuaBootstrapper : MonoBehaviour
         toolLoopSource.loop = true;
         toolLoopSource.volume = 0.32f;
 
+        ambientSource = gameObject.AddComponent<AudioSource>();
+        ambientSource.playOnAwake = false;
+        ambientSource.loop = true;
+        ambientSource.volume = 0.20f;
+
         clipBell        = LoadOrSynthesize("Audio/bell",   SynthesizeBellClip);
         clipStep        = LoadOrSynthesize("Audio/step",   SynthesizeStepClip);
         clipClickPin    = LoadOrSynthesize("Audio/click",  SynthesizeClickClip);
@@ -243,6 +261,13 @@ public class LuaBootstrapper : MonoBehaviour
         clipCleanLoop   = LoadOrSynthesize("Audio/clean",  SynthesizeCleanLoopClip);
         clipCoin        = LoadOrSynthesize("Audio/coin",   SynthesizeCoinClip);
         clipFail        = LoadOrSynthesize("Audio/fail",   SynthesizeFailClip);
+        clipClockTick   = LoadOrSynthesize("Audio/clock",  SynthesizeClockTickClip);
+
+        if (clipClockTick != null)
+        {
+            ambientSource.clip = clipClockTick;
+            ambientSource.Play();
+        }
     }
 
     private AudioClip LoadOrSynthesize(string path, System.Func<AudioClip> synthFunc)
@@ -397,6 +422,35 @@ public class LuaBootstrapper : MonoBehaviour
             data[i] = (Mathf.Sin(2f * Mathf.PI * freq * t) + 0.4f * Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t)) * env * 0.4f;
         }
         AudioClip c = AudioClip.Create("ProcFail", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
+    private AudioClip SynthesizeClockTickClip()
+    {
+        int sr = 44100;
+        int len = sr;
+        float[] data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            float s = 0f;
+            if (t < 0.12f)
+            {
+                float env = Mathf.Exp(-t * 60f);
+                float strike = Mathf.Sin(2f * Mathf.PI * 1150f * t) * 0.6f + Mathf.Sin(2f * Mathf.PI * 270f * t) * 0.4f;
+                s += strike * env * 0.35f;
+            }
+            if (t >= 0.5f && t < 0.62f)
+            {
+                float t2 = t - 0.5f;
+                float env2 = Mathf.Exp(-t2 * 65f);
+                float strike2 = Mathf.Sin(2f * Mathf.PI * 920f * t2) * 0.55f + Mathf.Sin(2f * Mathf.PI * 230f * t2) * 0.45f;
+                s += strike2 * env2 * 0.28f;
+            }
+            data[i] = s;
+        }
+        AudioClip c = AudioClip.Create("ProcClockTick", len, 1, sr, false);
         c.SetData(data, 0);
         return c;
     }
@@ -1416,7 +1470,12 @@ public class LuaBootstrapper : MonoBehaviour
     private void AddStationClickTrigger(GameObject stationGO, Vector2 interactPos, string stationId)
     {
         Button b = stationGO.AddComponent<Button>();
-        b.transition = Selectable.Transition.None;
+        b.transition = Selectable.Transition.ColorTint;
+        ColorBlock cb = b.colors;
+        cb.normalColor = Color.white;
+        cb.highlightedColor = new Color(1.15f, 1.12f, 1.05f, 1f);
+        cb.pressedColor = new Color(0.92f, 0.90f, 0.86f, 1f);
+        b.colors = cb;
         b.onClick.AddListener(() => {
             if (viewState == "ROOM")
             {
@@ -1516,6 +1575,23 @@ public class LuaBootstrapper : MonoBehaviour
         GameObject markerGO = CreatePanel(roomAreaRT, "ClickMarker", new Color(1f, 0.88f, 0.35f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(36, 36), spWaxSealBadge);
         markerGO.GetComponent<Image>().raycastTarget = false;
         clickMarkerRT = markerGO.GetComponent<RectTransform>();
+
+        dustMotes.Clear();
+        for (int i = 0; i < 16; i++)
+        {
+            GameObject dGO = CreatePanel(roomAreaRT, "Dust_" + i, new Color(1f, 0.92f, 0.70f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(6f, 6f), spSoftLightGlow);
+            dGO.GetComponent<Image>().raycastTarget = false;
+            dustMotes.Add(new DustMote
+            {
+                rt = dGO.GetComponent<RectTransform>(),
+                img = dGO.GetComponent<Image>(),
+                basePos = new Vector2(Random.Range(-550f, 550f), Random.Range(-220f, 180f)),
+                speedX = Random.Range(10f, 25f),
+                speedY = Random.Range(6f, 16f),
+                phase = Random.Range(0f, Mathf.PI * 2f),
+                radius = Random.Range(18f, 42f)
+            });
+        }
 
         // --- ПЕРСОНАЖ (МАСТЕР-РЕСТАВРАТОР) ---
         GameObject playerGO = CreatePanel(roomAreaRT, "PlayerCharacter", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), playerPos, new Vector2(98, 126), spArtisanChar);
@@ -2759,6 +2835,26 @@ public class LuaBootstrapper : MonoBehaviour
     // =========================================================================
     // ПОКАДРОВОЕ ОБНОВЛЕНИЕ (С РЕАЛТАЙМОВЫМ 2D PBR-ОСВЕЩЕНИЕМ ОТ КУРСОРА)
     // =========================================================================
+    private void UpdateDustMotes(float dt)
+    {
+        if (viewState != "ROOM")
+        {
+            for (int i = 0; i < dustMotes.Count; i++)
+                dustMotes[i].img.color = Color.clear;
+            return;
+        }
+        float t = Time.time;
+        for (int i = 0; i < dustMotes.Count; i++)
+        {
+            DustMote m = dustMotes[i];
+            float px = m.basePos.x + Mathf.Cos(t * 0.45f + m.phase) * m.radius;
+            float py = m.basePos.y + Mathf.Sin(t * 0.35f + m.phase * 1.5f) * (m.radius * 0.65f);
+            m.rt.anchoredPosition = new Vector2(px, py);
+            float pulse = (Mathf.Sin(t * 1.8f + m.phase) + 1f) * 0.5f;
+            m.img.color = new Color(1f, 0.90f, 0.65f, 0.10f + pulse * 0.25f);
+        }
+    }
+
     void Update()
     {
         float dt = Time.deltaTime;
@@ -2766,6 +2862,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         UpdateSparks(dt);
         UpdateClickNodesDecay(dt);
+        UpdateDustMotes(dt);
 
         if (viewState == "ROOM")
         {
@@ -2793,6 +2890,14 @@ public class LuaBootstrapper : MonoBehaviour
                 walkAnimTimer += dt * 14f;
                 float bobY = Mathf.Abs(Mathf.Sin(walkAnimTimer)) * 5.5f;
                 playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + bobY);
+
+                float moveDeltaX = targetPos.x - playerPos.x;
+                if (Mathf.Abs(moveDeltaX) > 1.5f)
+                {
+                    float sign = Mathf.Sign(moveDeltaX);
+                    playerRT.localScale = new Vector3(sign, 1f, 1f);
+                    playerBubbleText.transform.parent.localScale = new Vector3(sign, 1f, 1f);
+                }
 
                 stepSoundTimer -= dt;
                 if (stepSoundTimer <= 0f)
@@ -2979,7 +3084,14 @@ public class LuaBootstrapper : MonoBehaviour
                         }
                         else if (speedRatio > 0.03f && speedRatio < 0.82f)
                         {
+                            float prevFinish = finishProgress;
                             finishProgress = Mathf.Min(100f, finishProgress + dt * 48f * radiusMult);
+                            if (prevFinish < 100f && finishProgress >= 100f)
+                            {
+                                PlaySFX(clipBell, 0.85f, 1.25f);
+                                EmitSparks(localPt, 14, new Color(1f, 0.95f, 0.65f, 1f));
+                                bottomHintText.text = "РЕСТАВРАЦИЯ ЗАВЕРШЕНА! Нажмите 'Завершить и отнести в Окно заказов'.";
+                            }
                             modified = true;
                             sparkSpawnTimer += dt;
                             if (sparkSpawnTimer > 0.07f)
