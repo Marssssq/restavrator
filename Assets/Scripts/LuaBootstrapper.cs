@@ -175,6 +175,8 @@ public class LuaBootstrapper : MonoBehaviour
     private Text benchLogText, benchProgressText, benchModeNoticeText, speedBarLabelText;
     private Button btnGoToCabinetFromBench;
     private Image[] benchToolBtnImgs = new Image[4];
+    private Image btnDoneImg;
+    private Text btnDoneText;
 
     // Система частиц искр
     private class SparkParticle
@@ -1903,7 +1905,7 @@ public class LuaBootstrapper : MonoBehaviour
                 PlaySFX(clipFail, 0.45f, 1.1f);
                 bottomHintText.text = "Завершите все 4 этапа: Очистку (75%+), Шлифовку (75%+), Закрепку кликами (100%) и Полировку (80%+)!";
             }
-        }, out _, out _);
+        }, out btnDoneText, out btnDoneImg);
 
         CreateButton(workbenchOverlay.transform, "BackRoomBtn", "← Отойти от стола в мастерскую", new Vector2(0, -240), new Vector2(350, 40), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
             SetViewState("ROOM");
@@ -1949,6 +1951,14 @@ public class LuaBootstrapper : MonoBehaviour
             speedBarLabelText.text = "Режим полировки: Плавными кругами наведите зеркальный PBR-блеск";
             bottomHintText.text = "Зажмите ЛКМ и плавно водите по предмету до 100% сияния.";
         }
+    }
+
+    private void UpdateBenchDoneButtonVisuals()
+    {
+        if (btnDoneImg == null || btnDoneText == null) return;
+        bool allDone = (cleanProgress >= 75 && grindProgress >= 75 && clickFixProgress >= 100 && finishProgress >= 80f);
+        btnDoneImg.color = allDone ? new Color(0.24f, 0.65f, 0.32f, 1f) : new Color(0.38f, 0.28f, 0.22f, 1f);
+        btnDoneText.text = allDone ? "✓ ГОТОВО! Отнести в Окно заказов →" : "Завершить и отнести в Окно заказов ->";
     }
 
     private void BuildModalOverlay(Transform parent)
@@ -3205,11 +3215,16 @@ public class LuaBootstrapper : MonoBehaviour
                     }
                 }
 
+                string c1 = (cleanProgress >= 75) ? "✓" : "○";
+                string c2 = (grindProgress >= 75) ? "✓" : "○";
+                string c3 = (clickFixProgress >= 100) ? "✓" : "○";
+                string c4 = (finishProgress >= 80f) ? "✓" : "○";
                 benchProgressText.text =
-                    $"1. Очистка окислов: {cleanProgress}%\n" +
-                    $"2. Шлифовка (рывками): {grindProgress}%\n" +
-                    $"3. Закрепка (кликами): {clickFixProgress}%\n" +
-                    $"4. Финишный лоск: {Mathf.FloorToInt(finishProgress)}%";
+                    $"{c1} 1. Очистка окислов: {cleanProgress}% (цель 75%)\n" +
+                    $"{c2} 2. Шлифовка (рывками): {grindProgress}% (цель 75%)\n" +
+                    $"{c3} 3. Закрепка (кликами): {clickFixProgress}% (цель 100%)\n" +
+                    $"{c4} 4. Финишный лоск: {Mathf.FloorToInt(finishProgress)}% (цель 80%)";
+                UpdateBenchDoneButtonVisuals();
 
                 bool holdingMouse = Input.GetMouseButton(0) && Mathf.Abs(localPt.x) < 180f && Mathf.Abs(localPt.y) < 180f && activeBenchAction != "CLICK_FIX";
 
