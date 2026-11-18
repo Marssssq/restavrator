@@ -159,6 +159,7 @@ public class LuaBootstrapper : MonoBehaviour
     private Vector3[,] normalMap = new Vector3[TEX_SIZE, TEX_SIZE];
     private float[,] metallicMap = new float[TEX_SIZE, TEX_SIZE];
     private byte[,] isItemMask = new byte[TEX_SIZE, TEX_SIZE];
+    private byte[,] isGemMask = new byte[TEX_SIZE, TEX_SIZE];
     private byte[,] dirtMap = new byte[TEX_SIZE, TEX_SIZE];    // 0-нет, 1-окислы, 2-очищено, 3-стертый слой
     private float[,] burrMap = new float[TEX_SIZE, TEX_SIZE];  // 0..1 зазубрины для быстрой шлифовки
 
@@ -2112,6 +2113,7 @@ public class LuaBootstrapper : MonoBehaviour
                 float metallic = 0.02f;
 
                 bool isItem = false;
+                bool isGem = false;
                 bool isBurrZone = false;
                 float shadowDist = Mathf.Sqrt((dx - 5f) * (dx - 5f) + (dy + 6f) * (dy + 6f));
 
@@ -2135,6 +2137,7 @@ public class LuaBootstrapper : MonoBehaviour
                             norm = new Vector3(dx / 20f, gemY / 20f, Mathf.Sqrt(Mathf.Max(0.1f, 1f - (gemDist / 20f) * (gemDist / 20f))));
                             albedo = new Color(0.82f, 0.16f, 0.14f, 1f);
                             metallic = 0.45f;
+                            isGem = true;
                         }
                     }
                     else if (dist < 69f && dist > 41f)
@@ -2165,7 +2168,6 @@ public class LuaBootstrapper : MonoBehaviour
                         }
                         else
                         {
-                            // Кристаллическая карта нормалей граней бриллианта
                             int sector = Mathf.FloorToInt((ang + Mathf.PI) / (Mathf.PI * 0.25f));
                             float facetAngle = sector * (Mathf.PI * 0.25f);
                             norm = (dist < 30f)
@@ -2174,6 +2176,7 @@ public class LuaBootstrapper : MonoBehaviour
 
                             albedo = new Color(0.76f, 0.90f, 1.0f, 1f);
                             metallic = 0.78f;
+                            isGem = true;
 
                             if (dist > 34f && dist < 58f && Mathf.Cos(ang * 4f) > 0.45f)
                                 isBurrZone = true;
@@ -2193,6 +2196,7 @@ public class LuaBootstrapper : MonoBehaviour
                             norm = new Vector3(dx / 18f, dy / 18f, Mathf.Sqrt(Mathf.Max(0.1f, 1f - (dist / 18f) * (dist / 18f))));
                             albedo = new Color(0.14f, 0.38f, 0.88f, 1f);
                             metallic = 0.58f;
+                            isGem = true;
                         }
                         else if (beamDist < 4f)
                         {
@@ -2236,6 +2240,7 @@ public class LuaBootstrapper : MonoBehaviour
                             {
                                 albedo = (dist < 9f) ? new Color(0.82f, 0.14f, 0.28f, 1f) : new Color(0.96f, 0.80f, 0.34f, 1f);
                                 metallic = 0.90f;
+                                if (dist < 9f) isGem = true;
                             }
                         }
                     }
@@ -2245,6 +2250,7 @@ public class LuaBootstrapper : MonoBehaviour
                 normalMap[y, x] = norm.normalized;
                 metallicMap[y, x] = metallic;
                 isItemMask[y, x] = isItem ? (byte)1 : (byte)0;
+                isGemMask[y, x] = isGem ? (byte)1 : (byte)0;
                 dirtMap[y, x] = 0;
                 burrMap[y, x] = 0f;
 
@@ -2350,6 +2356,14 @@ public class LuaBootstrapper : MonoBehaviour
                 }
 
                 Vector3 toLight = new Vector3((lightTexX - x) * 0.00714f, (lightTexY - y) * 0.00714f, 0.85f);
+                if (isGemMask[y, x] == 1)
+                {
+                    float angle = Mathf.Atan2(toLight.y, toLight.x);
+                    float prism = Mathf.Sin(angle * 3.5f + (x + y) * 0.15f) * 0.14f;
+                    albedo.r = Mathf.Clamp01(albedo.r + prism);
+                    albedo.b = Mathf.Clamp01(albedo.b - prism * 0.6f);
+                    smoothness = Mathf.Max(smoothness, 0.94f);
+                }
                 pixelBuffer[rowIdx + x] = EvaluatePBRPixelFast(albedo, norm, metallic, smoothness, toLight);
             }
         }
