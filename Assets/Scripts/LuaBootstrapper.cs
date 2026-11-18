@@ -3153,6 +3153,8 @@ public class LuaBootstrapper : MonoBehaviour
                             EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
                             if (zonesDiscovered >= 3)
                             {
+                                PlaySFX(clipBell, 0.75f, 1.2f);
+                                EmitSparks(localPt, 16, new Color(1f, 0.95f, 0.50f, 1f));
                                 orderStage = "NEED_TOOLS";
                                 OpenWorkbenchView();
                             }
