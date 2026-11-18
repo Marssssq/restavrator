@@ -62,7 +62,7 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime;
 
     // =========================================================================
     // СТРУКТУРЫ ДАННЫХ И КЛИК-УЗЛОВ С ТАЙМЕРОМ СБРОСА
@@ -263,6 +263,7 @@ public class LuaBootstrapper : MonoBehaviour
         clipCoin        = LoadOrSynthesize("Audio/coin",   SynthesizeCoinClip);
         clipFail        = LoadOrSynthesize("Audio/fail",   SynthesizeFailClip);
         clipClockTick   = LoadOrSynthesize("Audio/clock",  SynthesizeClockTickClip);
+        clipCrystalChime = LoadOrSynthesize("Audio/chime", SynthesizeCrystalChimeClip);
 
         if (clipClockTick != null)
         {
@@ -452,6 +453,23 @@ public class LuaBootstrapper : MonoBehaviour
             data[i] = s;
         }
         AudioClip c = AudioClip.Create("ProcClockTick", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
+    private AudioClip SynthesizeCrystalChimeClip()
+    {
+        int sr = 44100;
+        int len = Mathf.FloorToInt(sr * 0.55f);
+        float[] data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            float env = Mathf.Exp(-t * 9f);
+            float tone = Mathf.Sin(2f * Mathf.PI * 1760f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 3520f * t) * 0.25f + Mathf.Sin(2f * Mathf.PI * 5280f * t) * 0.1f;
+            data[i] = tone * env * 0.42f;
+        }
+        AudioClip c = AudioClip.Create("ProcCrystalChime", len, 1, sr, false);
         c.SetData(data, 0);
         return c;
     }
@@ -3003,7 +3021,7 @@ public class LuaBootstrapper : MonoBehaviour
                         {
                             d.found = true;
                             zonesDiscovered++;
-                            PlaySFX(clipClickPin, 0.65f, 1.2f);
+                            PlaySFX(clipCrystalChime, 0.8f, 0.95f + zonesDiscovered * 0.18f);
                             benchLogText.text += "\n\n• " + d.text;
                             bottomHintText.text = $"Найдено повреждений под лупой: {zonesDiscovered} / 3";
                             EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
