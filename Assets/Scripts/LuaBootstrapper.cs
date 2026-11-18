@@ -181,8 +181,9 @@ public class LuaBootstrapper : MonoBehaviour
     private List<SparkParticle> sparks = new List<SparkParticle>();
     private float sparkSpawnTimer = 0f;
 
-    private Text modalTitle, modalBody, modalBtn1Text, modalBtn2Text;
+    private Text modalTitle, modalBody, modalBtn1Text, modalBtn2Text, modalSealText;
     private Button modalBtn1, modalBtn2;
+    private GameObject modalSealGO;
 
     // PBR-спрайты интерфейса и мебели
     private Sprite spBeveledPanel, spBeveledButton, spWaxSealBadge, spSoftLightGlow, spLoupeLens, spTargetClamp, spTimerRing;
@@ -1806,6 +1807,7 @@ public class LuaBootstrapper : MonoBehaviour
             }
             else
             {
+                PlaySFX(clipFail, 0.45f, 1.1f);
                 bottomHintText.text = "Завершите все 4 этапа: Очистку (75%+), Шлифовку (75%+), Закрепку кликами (100%) и Полировку (80%+)!";
             }
         }, out _, out _);
@@ -1862,6 +1864,11 @@ public class LuaBootstrapper : MonoBehaviour
 
         modalBtn1 = CreateButton(modalOverlay.transform, "Btn1", "Продолжить", new Vector2(0, -124), new Vector2(550, 44), new Color(0.28f, 0.50f, 0.32f, 1f), () => OnModalButtonClick(1), out modalBtn1Text, out _);
         modalBtn2 = CreateButton(modalOverlay.transform, "Btn2", "Вариант 2", new Vector2(0, -176), new Vector2(550, 44), new Color(0.48f, 0.28f, 0.22f, 1f), () => OnModalButtonClick(2), out modalBtn2Text, out _);
+
+        modalSealGO = CreatePanel(modalOverlay.transform, "ModalSeal", Color.white, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-65f, -60f), new Vector2(74f, 74f), spWaxSealBadge, false, true);
+        modalSealGO.GetComponent<Image>().raycastTarget = false;
+        modalSealText = CreateText(modalSealGO.transform, "SealTxt", "", 12, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
+
         modalOverlay.SetActive(false);
     }
 
@@ -1978,6 +1985,7 @@ public class LuaBootstrapper : MonoBehaviour
         if (activeBenchAction != "CLICK_FIX") return;
         if (cleanProgress < 35)
         {
+            PlaySFX(clipSpringReset, 0.35f, 1.4f);
             bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала очистите хотя бы 35% окислов растворителем!";
             return;
         }
@@ -2646,6 +2654,7 @@ public class LuaBootstrapper : MonoBehaviour
     private void TriggerMidOrderTwist()
     {
         SetViewState("TWIST");
+        modalSealGO.SetActive(false);
         modalTitle.text = "СМЕНА УСЛОВИЙ В МАСТЕРСКОЙ!";
         modalBody.text = activeOrder.twistText;
         modalBtn1.gameObject.SetActive(true);
@@ -2812,6 +2821,23 @@ public class LuaBootstrapper : MonoBehaviour
 
         historyLog.Add($"■ {activeOrder.title}\nИтог: {story} (Выплата: {pay} руб.)");
 
+        modalSealGO.SetActive(true);
+        if (isRuinedToZero)
+        {
+            modalSealGO.GetComponent<Image>().color = new Color(0.85f, 0.24f, 0.20f, 1f);
+            modalSealText.text = "БРАК";
+        }
+        else if (qualificationRank >= 3)
+        {
+            modalSealGO.GetComponent<Image>().color = new Color(0.95f, 0.78f, 0.25f, 1f);
+            modalSealText.text = "ЭТАЛОН";
+        }
+        else
+        {
+            modalSealGO.GetComponent<Image>().color = new Color(0.24f, 0.78f, 0.38f, 1f);
+            modalSealText.text = "ПРИНЯТО";
+        }
+
         modalTitle.text = "КАРТОЧКА ПРЕДМЕТА: " + activeOrder.title;
         modalBody.text = $"ОЦЕНКА ЗАКАЗЧИКА (Гонорар: {pay} руб. | Касса: {money} руб.):\n{string.Join("\n", notes)}\n\nИСТОРИЯ ПРЕДМЕТА:\n«{story}»";
         modalBtn1.gameObject.SetActive(true);
@@ -2823,6 +2849,9 @@ public class LuaBootstrapper : MonoBehaviour
     private void ShowShiftFinale()
     {
         SetViewState("FINALE");
+        modalSealGO.SetActive(true);
+        modalSealGO.GetComponent<Image>().color = secretViolated ? new Color(0.65f, 0.35f, 0.35f, 1f) : new Color(0.95f, 0.78f, 0.25f, 1f);
+        modalSealText.text = secretViolated ? "АРХИВ" : "ГРАНД";
         string rank = secretViolated ? "Любопытный ремесленник (Доверие утрачено)" :
                       (qualificationRank == 3 ? "Легендарный Гранд-мастер III разряда" : $"Мастер-реставратор {qualificationRank}-го разряда");
         modalTitle.text = "СМЕНА ЗАВЕРШЕНА — АРХИВ МАСТЕРСКОЙ";
