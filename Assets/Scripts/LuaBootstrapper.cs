@@ -54,6 +54,7 @@ public class LuaBootstrapper : MonoBehaviour
 
     private List<string> historyLog = new List<string>();
     private List<Texture2D> createdTextures = new List<Texture2D>();
+    private List<AudioClip> createdClips = new List<AudioClip>();
 
     // =========================================================================
     // АУДИОСИСТЕМА (ФАЙЛЫ ИЗ RESOURCES/AUDIO ИЛИ ПРОЦЕДУРНЫЙ СИНТЕЗ)
@@ -198,6 +199,11 @@ public class LuaBootstrapper : MonoBehaviour
             if (t != null) Destroy(t);
         }
         createdTextures.Clear();
+        foreach (var c in createdClips)
+        {
+            if (c != null) Destroy(c);
+        }
+        createdClips.Clear();
     }
 
     private Texture2D CreateTrackedTexture(int w, int h)
@@ -242,7 +248,10 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip LoadOrSynthesize(string path, System.Func<AudioClip> synthFunc)
     {
         AudioClip loaded = Resources.Load<AudioClip>(path);
-        return (loaded != null) ? loaded : synthFunc();
+        if (loaded != null) return loaded;
+        AudioClip synthesized = synthFunc();
+        if (synthesized != null) createdClips.Add(synthesized);
+        return synthesized;
     }
 
     private void PlaySFX(AudioClip clip, float volume = 0.7f, float pitch = 1.0f)
@@ -421,6 +430,48 @@ public class LuaBootstrapper : MonoBehaviour
         final.b = Mathf.Clamp01(final.b);
         final.a = albedo.a;
         return final;
+    }
+
+    private Color32 EvaluatePBRPixelFast(Color albedo, Vector3 normal, float metallic, float smoothness, Vector3 lightDir)
+    {
+        float lLen = Mathf.Sqrt(lightDir.x * lightDir.x + lightDir.y * lightDir.y + lightDir.z * lightDir.z);
+        if (lLen > 0.0001f) { lightDir.x /= lLen; lightDir.y /= lLen; lightDir.z /= lLen; }
+
+        float hx = lightDir.x;
+        float hy = lightDir.y;
+        float hz = lightDir.z + 1f;
+        float hLen = Mathf.Sqrt(hx * hx + hy * hy + hz * hz);
+        if (hLen > 0.0001f) { hx /= hLen; hy /= hLen; hz /= hLen; }
+
+        float ndotl = normal.x * lightDir.x + normal.y * lightDir.y + normal.z * lightDir.z;
+        if (ndotl < 0f) ndotl = 0f;
+
+        float ndoth = normal.x * hx + normal.y * hy + normal.z * hz;
+        if (ndoth < 0f) ndoth = 0f;
+
+        float rim = 1f - (normal.z > 0f ? normal.z : 0f);
+        if (rim < 0f) rim = 0f;
+
+        float shininess = 8f + smoothness * 88f;
+        float specPower = Mathf.Pow(ndoth, shininess) * smoothness * (0.4f + 0.8f * metallic);
+
+        float diffMult = ndotl * (1f - metallic * 0.35f) * 0.82f;
+        float specR = (1f - metallic) * 1f + metallic * (albedo.r + 0.25f);
+        float specG = (1f - metallic) * 0.96f + metallic * (albedo.g + 0.22f);
+        float specB = (1f - metallic) * 0.86f + metallic * (albedo.b + 0.15f);
+
+        float rimFactor = rim * rim * rim * 0.18f * metallic;
+
+        float rf = albedo.r * 0.36f + albedo.r * diffMult + specR * specPower + 0.95f * rimFactor;
+        float gf = albedo.g * 0.36f + albedo.g * diffMult + specG * specPower + 0.82f * rimFactor;
+        float bf = albedo.b * 0.36f + albedo.b * diffMult + specB * specPower + 0.55f * rimFactor;
+
+        byte r = (byte)(rf >= 1f ? 255 : (rf <= 0f ? 0 : (int)(rf * 255f)));
+        byte g = (byte)(gf >= 1f ? 255 : (gf <= 0f ? 0 : (int)(gf * 255f)));
+        byte b = (byte)(bf >= 1f ? 255 : (bf <= 0f ? 0 : (int)(bf * 255f)));
+        byte a = (byte)(albedo.a * 255f);
+
+        return new Color32(r, g, b, a);
     }
 
     private void GeneratePBRSprites()
@@ -2137,10 +2188,8 @@ public class LuaBootstrapper : MonoBehaviour
                     smoothness = 0.1f;
                 }
 
-                // Вычисление вектора на курсор-лампу для динамического PBR-блика
-                Vector3 toLight = new Vector3((lightTexX - x) / 140f, (lightTexY - y) / 140f, 0.85f);
-                Color litColor = EvaluatePBRPixel(albedo, norm, metallic, smoothness, toLight);
-                pixelBuffer[rowIdx + x] = litColor;
+                Vector3 toLight = new Vector3((lightTexX - x) * 0.00714f, (lightTexY - y) * 0.00714f, 0.85f);
+                pixelBuffer[rowIdx + x] = EvaluatePBRPixelFast(albedo, norm, metallic, smoothness, toLight);
             }
         }
 
@@ -2678,9 +2727,10 @@ public class LuaBootstrapper : MonoBehaviour
             }
 
             float distToTarget = Vector2.Distance(playerPos, targetPos);
-            if (distToTarget > 3f)
+            if (distToTarget > 2f)
             {
-                playerPos = Vector2.MoveTowards(playerPos, targetPos, moveSpeed * dt);
+                float stepSpeed = Mathf.Min(moveSpeed, distToTarget * 8.5f);
+                playerPos = Vector2.MoveTowards(playerPos, targetPos, stepSpeed * dt);
                 walkAnimTimer += dt * 14f;
                 float bobY = Mathf.Abs(Mathf.Sin(walkAnimTimer)) * 5.5f;
                 playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + bobY);
@@ -2722,8 +2772,7 @@ public class LuaBootstrapper : MonoBehaviour
             lastLocalMousePos = localPt;
             hasLastMouse = true;
 
-            // Если курсор двигается над столом — пересчитываем динамический PBR-блик на предмете!
-            if (isInside && localDist > 0.4f)
+            if (isInside && localDist > 2.8f)
             {
                 currentLightPos = localPt;
                 RefreshItemVisuals();
