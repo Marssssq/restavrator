@@ -2710,6 +2710,12 @@ public class LuaBootstrapper : MonoBehaviour
             benchToolsPanel.SetActive(true);
             btnGoToCabinetFromBench.gameObject.SetActive(false);
             benchModeNoticeText.text = "ЭТАПЫ РЕСТАВРАЦИИ:\n1. Плавная очистка\n2. Быстрая шлифовка рывками\n3. Быстрые клики без пауз\n4. Финишная полировка";
+
+            string toolName = (selectedMechTool == "DIAMOND_FILE") ? "Алмазный надфиль" : ((selectedMechTool == "RING_GRINDER") ? "Бормашина для колец" : "Микро-шпатель");
+            string solvName = (selectedSolvent == "ACID_GEL") ? "Ультра-гель" : ((selectedSolvent == "SPIRIT") ? "Спиртовой эфир" : "Технический ацетон");
+            string styleName = (selectedStyle == "NEW") ? "«Как новое»" : "«Патина»";
+            benchLogText.text = $"Предмет: {activeOrder.title}\nКлиент: {activeOrder.clientName}\n\nОснастка в руках:\n• {toolName}\n• {solvName}\n• Финиш: {styleName}\n\nПлан мастера:\n1. Очистка ({solvName})\n2. Шлифовка ({toolName})\n3. Закрепка штифтов (кликами)\n4. Полировка ({styleName})";
+
             SelectBenchTool("CLEAN");
         }
     }
