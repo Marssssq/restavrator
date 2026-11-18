@@ -62,7 +62,7 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch;
 
     // =========================================================================
     // СТРУКТУРЫ ДАННЫХ И КЛИК-УЗЛОВ С ТАЙМЕРОМ СБРОСА
@@ -150,6 +150,7 @@ public class LuaBootstrapper : MonoBehaviour
     private Text upgStatusText;
     private Text[] upgBtnLabels = new Text[4];
     private Image[] upgBtnImgs = new Image[4];
+    private Image[] upgBadgeImgs = new Image[4];
 
     // =========================================================================
     // 2D PBR-ШЕЙДЕРНЫЕ БУФЕРЫ ПРЕДМЕТА (ALBEDO + NORMAL MAP + METALLIC/ROUGHNESS)
@@ -165,9 +166,9 @@ public class LuaBootstrapper : MonoBehaviour
     private byte[,] dirtMap = new byte[TEX_SIZE, TEX_SIZE];    // 0-нет, 1-окислы, 2-очищено, 3-стертый слой
     private float[,] burrMap = new float[TEX_SIZE, TEX_SIZE];  // 0..1 зазубрины для быстрой шлифовки
 
-    private RectTransform itemSurfaceRT, loupeRT, speedFillRT;
-    private Image itemSurfaceImg, speedFillImg;
-    private GameObject loupeGO, benchToolsPanel, clickNodesContainer;
+    private RectTransform itemSurfaceRT, loupeRT, speedFillRT, toolCursorRT;
+    private Image itemSurfaceImg, speedFillImg, toolCursorImg;
+    private GameObject loupeGO, toolCursorGO, benchToolsPanel, clickNodesContainer;
     private Text benchLogText, benchProgressText, benchModeNoticeText, speedBarLabelText;
     private Button btnGoToCabinetFromBench;
     private Image[] benchToolBtnImgs = new Image[4];
@@ -267,6 +268,7 @@ public class LuaBootstrapper : MonoBehaviour
         clipFail        = LoadOrSynthesize("Audio/fail",   SynthesizeFailClip);
         clipClockTick   = LoadOrSynthesize("Audio/clock",  SynthesizeClockTickClip);
         clipCrystalChime = LoadOrSynthesize("Audio/chime", SynthesizeCrystalChimeClip);
+        clipToolSwitch  = LoadOrSynthesize("Audio/switch", SynthesizeToolSwitchClip);
 
         if (clipClockTick != null)
         {
@@ -473,6 +475,23 @@ public class LuaBootstrapper : MonoBehaviour
             data[i] = tone * env * 0.42f;
         }
         AudioClip c = AudioClip.Create("ProcCrystalChime", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
+    private AudioClip SynthesizeToolSwitchClip()
+    {
+        int sr = 44100;
+        int len = Mathf.FloorToInt(sr * 0.16f);
+        float[] data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            float env = Mathf.Exp(-t * 26f);
+            float s = Mathf.Sin(2f * Mathf.PI * (920f + t * 450f) * t) * 0.4f + (Random.value * 2f - 1f) * 0.15f * env;
+            data[i] = s * env * 0.45f;
+        }
+        AudioClip c = AudioClip.Create("ProcToolSwitch", len, 1, sr, false);
         c.SetData(data, 0);
         return c;
     }
@@ -1770,7 +1789,13 @@ public class LuaBootstrapper : MonoBehaviour
             int idx = i;
             float yPos = 105f - i * 74f;
             GameObject row = CreatePanel(upgradesOverlay.transform, "UpgRow_" + i, new Color(0.24f, 0.18f, 0.14f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, yPos), new Vector2(960, 64), spBeveledButton, true, true);
-            CreateText(row.transform, "Desc", titles[i], 14, new Color(0.95f, 0.92f, 0.86f, 1f), new Vector2(0, 0), new Vector2(0.70f, 1), new Vector2(20, 0), new Vector2(-20, -8), TextAnchor.MiddleLeft, true);
+            GameObject badgeGO = CreatePanel(row.transform, "Badge_" + i, Color.white, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(40f, 0f), new Vector2(46f, 46f), spWaxSealBadge, false, true);
+            badgeGO.GetComponent<Image>().raycastTarget = false;
+            upgBadgeImgs[i] = badgeGO.GetComponent<Image>();
+            string[] badgeLabels = { "✦", "⚙", "II", "III" };
+            CreateText(badgeGO.transform, "BadgeTxt", badgeLabels[i], 16, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
+
+            CreateText(row.transform, "Desc", titles[i], 14, new Color(0.95f, 0.92f, 0.86f, 1f), new Vector2(0, 0), new Vector2(0.70f, 1), new Vector2(76, 0), new Vector2(-76, -8), TextAnchor.MiddleLeft, true);
 
             CreateButton(row.transform, "BuyBtn_" + i, "Купить", new Vector2(330, 0), new Vector2(240, 44), new Color(0.28f, 0.52f, 0.32f, 1f), () => {
                 BuyUpgrade(idx);
@@ -1810,6 +1835,12 @@ public class LuaBootstrapper : MonoBehaviour
         loupeGO = CreatePanel(itemSurfaceRT, "LoupeRing", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(114, 114), spLoupeLens);
         loupeGO.GetComponent<Image>().raycastTarget = false;
         loupeRT = loupeGO.GetComponent<RectTransform>();
+
+        toolCursorGO = CreatePanel(itemSurfaceRT, "ToolCursorRing", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60, 60), spTimerRing);
+        toolCursorGO.GetComponent<Image>().raycastTarget = false;
+        toolCursorRT = toolCursorGO.GetComponent<RectTransform>();
+        toolCursorImg = toolCursorGO.GetComponent<Image>();
+        toolCursorGO.SetActive(false);
 
         GameObject speedBar = CreatePanel(centerMat.transform, "SpeedBar", new Color(0.10f, 0.10f, 0.10f, 0.95f), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -26), new Vector2(360, 24), spBeveledButton, true);
         GameObject speedFill = CreatePanel(speedBar.transform, "Fill", new Color(0.28f, 0.82f, 0.42f, 1f), new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, Vector2.zero);
@@ -1868,6 +1899,8 @@ public class LuaBootstrapper : MonoBehaviour
         int activeIdx = toolId == "CLEAN" ? 0 : (toolId == "GRIND" ? 1 : (toolId == "CLICK_FIX" ? 2 : 3));
         for (int i = 0; i < 4; i++)
             benchToolBtnImgs[i].color = (i == activeIdx) ? new Color(0.72f, 0.56f, 0.22f, 1f) : defCols[i];
+
+        PlaySFX(clipToolSwitch, 0.5f, activeIdx == 0 ? 0.9f : (activeIdx == 1 ? 1.1f : (activeIdx == 2 ? 1.3f : 1.5f)));
 
         if (toolId == "CLEAN")
         {
@@ -2406,6 +2439,7 @@ public class LuaBootstrapper : MonoBehaviour
     {
         viewState = newState;
         if (toolLoopSource != null && toolLoopSource.isPlaying) toolLoopSource.Stop();
+        if (toolCursorGO != null) toolCursorGO.SetActive(false);
 
         windowOverlay.SetActive(newState == "WINDOW_SELECT");
         workbenchOverlay.SetActive(newState == "WORKBENCH");
@@ -2528,15 +2562,19 @@ public class LuaBootstrapper : MonoBehaviour
 
         upgBtnLabels[0].text = upgPrecisionBits ? "Куплено" : "Купить за 800 руб.";
         upgBtnImgs[0].color = upgPrecisionBits ? new Color(0.3f, 0.3f, 0.3f, 1f) : new Color(0.28f, 0.52f, 0.32f, 1f);
+        if (upgBadgeImgs[0] != null) upgBadgeImgs[0].color = upgPrecisionBits ? new Color(0.40f, 0.85f, 1f, 1f) : new Color(0.35f, 0.55f, 0.65f, 0.65f);
 
         upgBtnLabels[1].text = upgStabilizer ? "Куплено" : "Купить за 1200 руб.";
         upgBtnImgs[1].color = upgStabilizer ? new Color(0.3f, 0.3f, 0.3f, 1f) : new Color(0.28f, 0.52f, 0.32f, 1f);
+        if (upgBadgeImgs[1] != null) upgBadgeImgs[1].color = upgStabilizer ? new Color(0.35f, 0.90f, 0.45f, 1f) : new Color(0.35f, 0.55f, 0.40f, 0.65f);
 
         upgBtnLabels[2].text = (qualificationRank >= 2) ? "Получено" : "Повысить за 1600 руб.";
         upgBtnImgs[2].color = (qualificationRank >= 2) ? new Color(0.3f, 0.3f, 0.3f, 1f) : new Color(0.55f, 0.40f, 0.16f, 1f);
+        if (upgBadgeImgs[2] != null) upgBadgeImgs[2].color = (qualificationRank >= 2) ? new Color(0.95f, 0.78f, 0.25f, 1f) : new Color(0.65f, 0.50f, 0.25f, 0.65f);
 
         upgBtnLabels[3].text = (qualificationRank >= 3) ? "Получено" : "Повысить за 3000 руб.";
         upgBtnImgs[3].color = (qualificationRank >= 3) ? new Color(0.3f, 0.3f, 0.3f, 1f) : new Color(0.55f, 0.40f, 0.16f, 1f);
+        if (upgBadgeImgs[3] != null) upgBadgeImgs[3].color = (qualificationRank >= 3) ? new Color(0.86f, 0.35f, 0.90f, 1f) : new Color(0.55f, 0.30f, 0.58f, 0.65f);
 
         UpdateTopBar();
     }
@@ -2908,13 +2946,14 @@ public class LuaBootstrapper : MonoBehaviour
         SetViewState("FINALE");
         modalSealGO.SetActive(true);
         modalSealGO.GetComponent<Image>().color = secretViolated ? new Color(0.65f, 0.35f, 0.35f, 1f) : new Color(0.95f, 0.78f, 0.25f, 1f);
-        modalSealText.text = secretViolated ? "АРХИВ" : "ГРАНД";
+        modalSealText.text = secretViolated ? "АРХИВ" : (qualificationRank >= 3 ? "ГРАНД" : "МАСТЕР");
         string rank = secretViolated ? "Любопытный ремесленник (Доверие утрачено)" :
                       (qualificationRank == 3 ? "Легендарный Гранд-мастер III разряда" : $"Мастер-реставратор {qualificationRank}-го разряда");
-        modalTitle.text = "СМЕНА ЗАВЕРШЕНА — АРХИВ МАСТЕРСКОЙ";
-        modalBody.text = $"Итоговый статус: {rank}\nНакоплено в кассе: {money} руб. | Доверие: {trust}%\n\nИСТОРИИ ВОССТАНОВЛЕННЫХ РЕЛИКВИЙ:\n{string.Join("\n\n", historyLog)}";
+        int efficiencyPercent = Mathf.Clamp(Mathf.RoundToInt(trust * 0.75f + (money / 70f)), 10, 100);
+        modalTitle.text = "СМЕНА ЗАВЕРШЕНА — ЗОЛОТОЙ ДИПЛОМ ГИЛЬДИИ";
+        modalBody.text = $"Квалификационный статус: {rank}\nИтоговый капитал: {money} руб.  |  Репутация гильдии: {trust}%\nТочность реставрации: {efficiencyPercent}%\n\nВОССТАНОВЛЕННЫЕ МУЗЕЙНЫЕ ШЕДЕВРЫ:\n{string.Join("\n\n", historyLog)}";
         modalBtn1.gameObject.SetActive(true);
-        modalBtn1Text.text = "Начать новую игру";
+        modalBtn1Text.text = "Начать новую рабочую смену";
         modalBtn2.gameObject.SetActive(false);
     }
 
@@ -3040,6 +3079,7 @@ public class LuaBootstrapper : MonoBehaviour
 
             if (orderStage == "NEED_DIAGNOSIS" && isInside)
             {
+                if (toolCursorGO != null && toolCursorGO.activeSelf) toolCursorGO.SetActive(false);
                 loupeRT.anchoredPosition = localPt;
                 float closestDist = 999f;
                 foreach (var d in activeOrder.diagnostics)
@@ -3077,6 +3117,42 @@ public class LuaBootstrapper : MonoBehaviour
             }
             else if ((orderStage == "READY_TO_RESTORE" || orderStage == "READY_TO_SUBMIT") && isInside)
             {
+                if (toolCursorGO != null)
+                {
+                    if (activeBenchAction != "CLICK_FIX")
+                    {
+                        toolCursorGO.SetActive(true);
+                        toolCursorRT.anchoredPosition = localPt;
+                        float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
+                        float ringDiam = 44f * radiusMult;
+                        Color ringCol = new Color(0.40f, 0.80f, 1f, 0.65f);
+
+                        if (activeBenchAction == "CLEAN")
+                        {
+                            ringDiam = 42f * radiusMult;
+                            bool isTooFast = speedRatio > (upgStabilizer ? 0.86f : 0.72f);
+                            ringCol = isTooFast ? new Color(0.95f, 0.25f, 0.20f, 0.85f) : new Color(0.40f, 0.80f, 1f, 0.65f);
+                        }
+                        else if (activeBenchAction == "GRIND")
+                        {
+                            ringDiam = 56f * radiusMult;
+                            ringCol = (speedRatio > 0.26f) ? new Color(1f, 0.78f, 0.22f, 0.85f) : new Color(0.70f, 0.50f, 0.30f, 0.45f);
+                        }
+                        else if (activeBenchAction == "FINISH")
+                        {
+                            ringDiam = 64f * radiusMult;
+                            ringCol = (cleanProgress >= 65 && grindProgress >= 65 && clickFixProgress >= 100) ? new Color(1f, 0.95f, 0.55f, 0.80f) : new Color(0.6f, 0.6f, 0.6f, 0.35f);
+                        }
+
+                        toolCursorRT.sizeDelta = new Vector2(ringDiam, ringDiam);
+                        toolCursorImg.color = ringCol;
+                    }
+                    else
+                    {
+                        toolCursorGO.SetActive(false);
+                    }
+                }
+
                 benchProgressText.text =
                     $"1. Очистка окислов: {cleanProgress}%\n" +
                     $"2. Шлифовка (рывками): {grindProgress}%\n" +
@@ -3228,9 +3304,10 @@ public class LuaBootstrapper : MonoBehaviour
                     }
                 }
             }
-            else if (toolLoopSource != null && toolLoopSource.isPlaying)
+            else
             {
-                toolLoopSource.Stop();
+                if (toolCursorGO != null && toolCursorGO.activeSelf) toolCursorGO.SetActive(false);
+                if (toolLoopSource != null && toolLoopSource.isPlaying) toolLoopSource.Stop();
             }
         }
     }
