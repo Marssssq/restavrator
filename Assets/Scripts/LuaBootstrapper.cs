@@ -2982,6 +2982,19 @@ public class LuaBootstrapper : MonoBehaviour
             if (orderStage == "NEED_DIAGNOSIS" && isInside)
             {
                 loupeRT.anchoredPosition = localPt;
+                float closestDist = 999f;
+                foreach (var d in activeOrder.diagnostics)
+                {
+                    if (!d.found)
+                    {
+                        float curD = Vector2.Distance(localPt, new Vector2(d.x, d.y));
+                        if (curD < closestDist) closestDist = curD;
+                    }
+                }
+                float proximity = Mathf.Clamp01(1f - closestDist / 70f);
+                loupeGO.GetComponent<Image>().color = Color.Lerp(Color.white, new Color(1f, 0.90f, 0.50f, 1f), proximity);
+                loupeRT.localScale = Vector3.one * (1f + proximity * 0.08f);
+
                 if (Input.GetMouseButton(0))
                 {
                     foreach (var d in activeOrder.diagnostics)
@@ -2993,7 +3006,7 @@ public class LuaBootstrapper : MonoBehaviour
                             PlaySFX(clipClickPin, 0.65f, 1.2f);
                             benchLogText.text += "\n\n• " + d.text;
                             bottomHintText.text = $"Найдено повреждений под лупой: {zonesDiscovered} / 3";
-                            EmitSparks(localPt, 5, new Color(0.95f, 0.90f, 0.45f, 1f));
+                            EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
                             if (zonesDiscovered >= 3)
                             {
                                 orderStage = "NEED_TOOLS";
@@ -3058,11 +3071,22 @@ public class LuaBootstrapper : MonoBehaviour
                                 }
                             }
                         }
+
+                        if (modified && !isTooFast)
+                        {
+                            sparkSpawnTimer += dt;
+                            if (sparkSpawnTimer > 0.08f)
+                            {
+                                sparkSpawnTimer = 0f;
+                                EmitSparks(localPt, 1, new Color(0.72f, 0.90f, 1f, 0.70f));
+                            }
+                        }
                     }
                     else if (activeBenchAction == "GRIND")
                     {
                         if (cleanProgress < 35)
                         {
+                            PlaySFX(clipSpringReset, 0.35f, 1.4f);
                             bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала смойте хотя бы 35% окислов растворителем!";
                         }
                         else if (speedRatio < 0.26f)
@@ -3109,6 +3133,7 @@ public class LuaBootstrapper : MonoBehaviour
                     {
                         if (cleanProgress < 65 || grindProgress < 65 || clickFixProgress < 100)
                         {
+                            PlaySFX(clipSpringReset, 0.35f, 1.4f);
                             bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала завершите Очистку, Шлифовку и Закрепку всех 4 узлов кликами!";
                         }
                         else if (speedRatio > 0.03f && speedRatio < 0.82f)
