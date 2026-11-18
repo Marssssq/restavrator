@@ -1288,9 +1288,33 @@ public class LuaBootstrapper : MonoBehaviour
         royalOrder.diagnostics.Add(new DiagZone(38, -25, 46, "Оправа: Микро-трещины по канту. Нужен Ювелирный микро-шпатель."));
         royalOrder.diagnostics.Add(new DiagZone(0, -48, 46, "Крепление сапфира: Требует быстрой фиксации кликами без пауз."));
 
+        OrderData byzantineOrder = new OrderData
+        {
+            id = "byzantine_" + completedOrdersCount,
+            shapeType = "CROSS",
+            title = "Византийский энколпион XII века",
+            clientName = "Верховный Патриарший Синод",
+            clientType = "COLLECTOR",
+            baseReward = 6200,
+            requiredRank = 3,
+            shortDesc = "Требуемый разряд: III\nРеликвия величайшей ценности. Золотая скань и центральный сапфир.\nРекордный гонорар: 6200 руб.",
+            briefingText = "«Древнейший крест-энколпион времен Царьграда. Вековой налет скрывает византийскую скань, а заклепки каста ослабли. Работа только для признанного Гранд-мастера III разряда!»",
+            correctMechTool = "MICRO_SPATULA",
+            correctSolvent = "SPIRIT",
+            preferredStyle = "PATINA",
+            twistType = "SECRET_BOX",
+            twistText = "ДРЕВНИЙ КОВЧЕГ: Внутренняя полость энколпиона приоткрылась! Внутри сокрыта священная реликвия на пожелтевшем пергаменте.",
+            histPatina = "Древнее золото сохранило сакральную патину тысячи лет, став жемчужиной сокровищницы.",
+            histNew = "Древний крест отполирован до современного блеска, утратив ощущение дыхания византийской эпохи.",
+            histSpecial = "Повреждение святыни вызвало скандал в высших церковных кругах."
+        };
+        byzantineOrder.diagnostics.Add(new DiagZone(-30, 10, 46, "Золотая скань: Тончайшая филигрань. Очищается только мягким Спиртовым эфиром."));
+        byzantineOrder.diagnostics.Add(new DiagZone(30, 10, 46, "Лучи энколпиона: Зазубрины на торцах. Требуется Ювелирный микро-шпатель."));
+        byzantineOrder.diagnostics.Add(new DiagZone(0, -35, 46, "Крепление сапфира: 4 штифта требуют серии предельно быстрых кликов без задержек."));
+
         currentWindowChoices.Add(ringOrder);
         currentWindowChoices.Add(diamondOrder);
-        currentWindowChoices.Add(royalOrder);
+        currentWindowChoices.Add(qualificationRank >= 3 ? byzantineOrder : royalOrder);
     }
 
     private OrderData CreateCheapOrder(int idx)
@@ -1812,8 +1836,10 @@ public class LuaBootstrapper : MonoBehaviour
                     sparks[i].pos += sparks[i].vel * dt;
                     sparks[i].rt.anchoredPosition = sparks[i].pos;
                     Color c = sparks[i].baseCol;
-                    c.a = sparks[i].life / sparks[i].maxLife;
+                    float lifeRatio = sparks[i].life / sparks[i].maxLife;
+                    c.a = lifeRatio;
                     sparks[i].img.color = c;
+                    sparks[i].rt.sizeDelta = Vector2.Lerp(new Vector2(2.5f, 2.5f), new Vector2(10f, 10f), lifeRatio);
                 }
             }
         }
@@ -1832,6 +1858,8 @@ public class LuaBootstrapper : MonoBehaviour
             pts = new Vector2[] { new Vector2(0, 84), new Vector2(-84, 0), new Vector2(84, 0), new Vector2(0, -84) };
         else if (shapeType == "DIAMOND")
             pts = new Vector2[] { new Vector2(-58, 58), new Vector2(58, 58), new Vector2(-58, -58), new Vector2(58, -58) };
+        else if (shapeType == "CROSS")
+            pts = new Vector2[] { new Vector2(0, 72), new Vector2(-62, 10), new Vector2(62, 10), new Vector2(0, -72) };
         else
             pts = new Vector2[] { new Vector2(0, 88), new Vector2(-68, 0), new Vector2(68, 0), new Vector2(0, -88) };
 
@@ -1883,6 +1911,7 @@ public class LuaBootstrapper : MonoBehaviour
         {
             cn.clicksLeft--;
             cn.resetTimer = CLICK_RESET_TIME;
+            cn.uiRT.localScale = new Vector2(1.22f, 1.22f);
             PlaySFX(clipClickPin, 0.65f, 0.9f + (5 - cn.clicksLeft) * 0.14f);
             EmitSparks(cn.pos, 7, new Color(0.55f, 0.92f, 1f, 1f));
 
@@ -1911,6 +1940,7 @@ public class LuaBootstrapper : MonoBehaviour
         bool anyReset = false;
         foreach (var cn in activeClickNodes)
         {
+            if (cn.uiRT != null) cn.uiRT.localScale = Vector2.Lerp(cn.uiRT.localScale, Vector2.one, dt * 12f);
             if (cn.clicksLeft > 0 && cn.clicksLeft < cn.maxClicks)
             {
                 cn.resetTimer -= dt;
@@ -2045,6 +2075,35 @@ public class LuaBootstrapper : MonoBehaviour
 
                             if (dist > 34f && dist < 58f && Mathf.Cos(ang * 4f) > 0.45f)
                                 isBurrZone = true;
+                        }
+                    }
+                }
+                else if (shapeType == "CROSS")
+                {
+                    bool inV = Mathf.Abs(dx) < 20f && dy > -72f && dy < 72f;
+                    bool inH = Mathf.Abs(dy - 10f) < 20f && Mathf.Abs(dx) < 64f;
+                    if (inV || inH)
+                    {
+                        isItem = true;
+                        float beamDist = Mathf.Min(inV ? 20f - Mathf.Abs(dx) : 100f, inH ? 20f - Mathf.Abs(dy - 10f) : 100f);
+                        if (dist < 18f)
+                        {
+                            norm = new Vector3(dx / 18f, dy / 18f, Mathf.Sqrt(Mathf.Max(0.1f, 1f - (dist / 18f) * (dist / 18f))));
+                            albedo = new Color(0.14f, 0.38f, 0.88f, 1f);
+                            metallic = 0.58f;
+                        }
+                        else if (beamDist < 4f)
+                        {
+                            norm = new Vector3(dx / 64f, dy / 72f, 0.65f);
+                            albedo = new Color(0.96f, 0.82f, 0.34f, 1f);
+                            metallic = 0.94f;
+                            if (dist > 45f) isBurrZone = true;
+                        }
+                        else
+                        {
+                            norm = new Vector3(dx / 50f, dy / 60f, 0.82f);
+                            albedo = new Color(0.88f, 0.70f, 0.24f, 1f);
+                            metallic = 0.88f;
                         }
                     }
                 }
