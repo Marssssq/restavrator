@@ -139,6 +139,8 @@ public class LuaBootstrapper : MonoBehaviour
     private Text[] cardDescs = new Text[3];
     private Text[] cardBtnLabels = new Text[3];
     private Image[] cardBtnImgs = new Image[3];
+    private Image[] cardBadgeImgs = new Image[3];
+    private Text[] cardBadgeTexts = new Text[3];
 
     private List<Image> toolBtnImgs = new List<Image>();
     private List<Image> solventBtnImgs = new List<Image>();
@@ -1654,6 +1656,20 @@ public class LuaBootstrapper : MonoBehaviour
             cardClients[i] = CreateText(card.transform, "Client", "", 13, new Color(0.76f, 0.92f, 0.80f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -72), new Vector2(-24, 32), TextAnchor.MiddleCenter, true);
             cardDescs[i] = CreateText(card.transform, "Desc", "", 14, new Color(0.94f, 0.91f, 0.86f, 1f), new Vector2(0, 0.22f), new Vector2(1, 0.76f), Vector2.zero, new Vector2(-28, -10), TextAnchor.UpperLeft);
 
+            GameObject badgeGO = CreatePanel(card.transform, "CardBadge", new Color(0.85f, 0.68f, 0.26f, 1f), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-28, -28), new Vector2(40, 40), spWaxSealBadge, false, true);
+            badgeGO.GetComponent<Image>().raycastTarget = false;
+            cardBadgeImgs[i] = badgeGO.GetComponent<Image>();
+            cardBadgeTexts[i] = CreateText(badgeGO.transform, "BadgeRank", "I", 14, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
+
+            Button cardClick = card.AddComponent<Button>();
+            cardClick.transition = Selectable.Transition.ColorTint;
+            ColorBlock ccb = cardClick.colors;
+            ccb.normalColor = Color.white;
+            ccb.highlightedColor = new Color(1.12f, 1.10f, 1.05f, 1f);
+            ccb.pressedColor = new Color(0.90f, 0.88f, 0.85f, 1f);
+            cardClick.colors = ccb;
+            cardClick.onClick.AddListener(() => SelectOrderFromWindow(idx));
+
             CreateButton(card.transform, "TakeBtn", "Принять заказ", new Vector2(0, -140), new Vector2(280, 44), new Color(0.26f, 0.52f, 0.32f, 1f), () => {
                 SelectOrderFromWindow(idx);
             }, out cardBtnLabels[i], out cardBtnImgs[i]);
@@ -2563,6 +2579,15 @@ public class LuaBootstrapper : MonoBehaviour
             bool locked = (qualificationRank < od.requiredRank);
             cardBtnLabels[i].text = locked ? $"Нужен {od.requiredRank}-й разряд" : "Принять заказ";
             cardBtnImgs[i].color = locked ? new Color(0.45f, 0.24f, 0.22f, 1f) : new Color(0.26f, 0.52f, 0.32f, 1f);
+
+            string romanRank = od.requiredRank == 1 ? "I" : (od.requiredRank == 2 ? "II" : "III");
+            cardBadgeTexts[i].text = romanRank;
+            if (od.requiredRank == 1)
+                cardBadgeImgs[i].color = new Color(0.75f, 0.58f, 0.35f, 1f);
+            else if (od.requiredRank == 2)
+                cardBadgeImgs[i].color = new Color(0.95f, 0.78f, 0.25f, 1f);
+            else
+                cardBadgeImgs[i].color = new Color(0.86f, 0.32f, 0.88f, 1f);
         }
     }
 
