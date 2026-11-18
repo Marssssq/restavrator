@@ -64,6 +64,8 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
     private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch;
+    private bool isMuted = false;
+    private Text muteBtnText;
 
     // =========================================================================
     // СТРУКТУРЫ ДАННЫХ И КЛИК-УЗЛОВ С ТАЙМЕРОМ СБРОСА
@@ -1660,7 +1662,18 @@ public class LuaBootstrapper : MonoBehaviour
         // Верхняя и нижняя панели
         GameObject topBar = CreatePanel(rootBG.transform, "TopBar", new Color(0.16f, 0.12f, 0.09f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -28), new Vector2(0, 56), null, false, true);
         topTitleText = CreateText(topBar.transform, "Title", "Мастерская «Реставратор»", 17, new Color(0.98f, 0.88f, 0.64f, 1f), new Vector2(0, 0), new Vector2(0.52f, 1), new Vector2(22, 0), new Vector2(-20, 0), TextAnchor.MiddleLeft, true);
-        topStatsText = CreateText(topBar.transform, "Stats", "", 15, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.52f, 0), new Vector2(1, 1), new Vector2(-22, 0), new Vector2(-20, 0), TextAnchor.MiddleRight, true);
+        topStatsText = CreateText(topBar.transform, "Stats", "", 15, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.52f, 0), new Vector2(1, 1), new Vector2(-68, 0), new Vector2(-74, 0), TextAnchor.MiddleRight, true);
+
+        Button muteBtn = CreateButton(topBar.transform, "MuteBtn", "🔊", Vector2.zero, new Vector2(40, 36), new Color(0.24f, 0.18f, 0.14f, 1f), () => {
+            isMuted = !isMuted;
+            AudioListener.volume = isMuted ? 0f : 1f;
+            if (muteBtnText != null) muteBtnText.text = isMuted ? "🔇" : "🔊";
+        }, out muteBtnText, out _);
+        RectTransform mbrt = muteBtn.GetComponent<RectTransform>();
+        mbrt.anchorMin = new Vector2(1, 0.5f);
+        mbrt.anchorMax = new Vector2(1, 0.5f);
+        mbrt.anchoredPosition = new Vector2(-32, 0);
+        muteBtnText.fontSize = 18;
 
         GameObject bottomBar = CreatePanel(rootBG.transform, "BottomBar", new Color(0.16f, 0.12f, 0.09f, 1f), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 24), new Vector2(0, 48));
         bottomHintText = CreateText(bottomBar.transform, "BottomHint", "", 15, new Color(0.98f, 0.92f, 0.74f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-30, 0), TextAnchor.MiddleCenter, true);
