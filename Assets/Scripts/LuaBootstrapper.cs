@@ -159,6 +159,18 @@ public class LuaBootstrapper : MonoBehaviour
     private Image[] benchToolBtnImgs = new Image[4];
     private Image btnDoneImg;
     private Text btnDoneText;
+    private float benchZoom = 1.0f;
+    private float targetBenchZoom = 1.0f;
+    private Text benchZoomBtnText;
+
+    private Sprite spGalleryRing, spGalleryDiamond, spGalleryLocket, spGalleryCross;
+    private GameObject upgEquipContainer, upgGalleryContainer;
+    private Image upgTabBtnEquipImg, upgTabBtnGalleryImg;
+    private Text galleryStatusText;
+    private Image[] galleryCardIcons = new Image[4];
+    private Text[] galleryCardTitles = new Text[4];
+    private Text[] galleryCardBadges = new Text[4];
+    private Text[] galleryCardLores = new Text[4];
 
     private class SparkParticle
     {
@@ -416,28 +428,32 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeClockTickClip()
     {
         int sr = 44100;
-        int len = sr;
+        int len = sr * 4;
         float[] data = new float[len];
+        System.Random rnd = new System.Random(42);
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
             float s = 0f;
-            if (t < 0.12f)
+            float secFrac = t - Mathf.Floor(t);
+            int secIdx = Mathf.FloorToInt(t);
+            if (secFrac < 0.12f)
             {
-                float env = Mathf.Exp(-t * 60f);
-                float strike = Mathf.Sin(2f * Mathf.PI * 1150f * t) * 0.6f + Mathf.Sin(2f * Mathf.PI * 270f * t) * 0.4f;
-                s += strike * env * 0.35f;
+                float freq = (secIdx % 2 == 0) ? 1160f : 940f;
+                float bodyFreq = (secIdx % 2 == 0) ? 280f : 240f;
+                float env = Mathf.Exp(-secFrac * 58f);
+                float strike = Mathf.Sin(2f * Mathf.PI * freq * secFrac) * 0.55f + Mathf.Sin(2f * Mathf.PI * bodyFreq * secFrac) * 0.45f;
+                s += strike * env * 0.28f;
             }
-            if (t >= 0.5f && t < 0.62f)
+            if (rnd.NextDouble() < 0.00075)
             {
-                float t2 = t - 0.5f;
-                float env2 = Mathf.Exp(-t2 * 65f);
-                float strike2 = Mathf.Sin(2f * Mathf.PI * 920f * t2) * 0.55f + Mathf.Sin(2f * Mathf.PI * 230f * t2) * 0.45f;
-                s += strike2 * env2 * 0.28f;
+                float pop = (float)(rnd.NextDouble() * 2.0 - 1.0) * 0.14f;
+                s += pop;
             }
-            data[i] = s;
+            s += Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.012f;
+            data[i] = Mathf.Clamp(s, -0.95f, 0.95f);
         }
-        AudioClip c = AudioClip.Create("ProcClockTick", len, 1, sr, false);
+        AudioClip c = AudioClip.Create("ProcAmbience", len, 1, sr, false);
         c.SetData(data, 0);
         return c;
     }
@@ -561,6 +577,123 @@ public class LuaBootstrapper : MonoBehaviour
         spStationCabinet     = CreateCabinetStationSprite(320, 175);
         spStationMasterStand = CreateMasterStandSprite(260, 190);
         spArtisanChar        = CreateDetailedArtisanSprite(116, 146);
+        spGalleryRing        = CreateRelicIconSprite("RING", 128);
+        spGalleryDiamond     = CreateRelicIconSprite("DIAMOND", 128);
+        spGalleryLocket      = CreateRelicIconSprite("LOCKET", 128);
+        spGalleryCross       = CreateRelicIconSprite("CROSS", 128);
+    }
+
+    private Sprite CreateRelicIconSprite(string shapeType, int size)
+    {
+        Texture2D tex = CreateTrackedTexture(size, size);
+        Color[] cols = new Color[size * size];
+        float cx = size * 0.5f;
+        float cy = size * 0.5f;
+        Vector3 lightDir = new Vector3(0.577f, 0.577f, 0.577f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - cx) / (size * 0.5f);
+                float dy = (y - cy) / (size * 0.5f);
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                int idx = y * size + x;
+
+                if (dist > 0.98f)
+                {
+                    cols[idx] = Color.clear;
+                    continue;
+                }
+
+                Color albedo = Color.clear;
+                Vector3 norm = Vector3.forward;
+                float metal = 0.85f;
+                float smooth = 0.75f;
+
+                if (shapeType == "RING")
+                {
+                    float rDist = Mathf.Abs(dist - 0.55f);
+                    if (rDist < 0.22f)
+                    {
+                        albedo = new Color(0.96f, 0.78f, 0.28f, 1f);
+                        float nd = (dist - 0.55f) / 0.22f;
+                        norm = new Vector3(dx * 0.6f + nd * 0.4f, dy * 0.6f + nd * 0.4f, Mathf.Sqrt(Mathf.Max(0.01f, 1f - nd * nd))).normalized;
+                        metal = 0.92f;
+                        smooth = 0.88f;
+                    }
+                    float gDist = Mathf.Sqrt(dx * dx + (dy - 0.55f) * (dy - 0.55f));
+                    if (gDist < 0.24f)
+                    {
+                        albedo = new Color(0.88f, 0.12f, 0.22f, 1f);
+                        norm = new Vector3(dx * 2f, (dy - 0.55f) * 2f, 1f).normalized;
+                        metal = 0.20f;
+                        smooth = 0.95f;
+                    }
+                }
+                else if (shapeType == "DIAMOND")
+                {
+                    float manhattan = Mathf.Abs(dx) + Mathf.Abs(dy);
+                    if (dist < 0.72f && manhattan < 0.95f)
+                    {
+                        albedo = new Color(0.92f, 0.96f, 1.0f, 1f);
+                        float ang = Mathf.Atan2(dy, dx);
+                        float facet = Mathf.Cos(ang * 8f);
+                        norm = new Vector3(dx + facet * 0.2f, dy + facet * 0.2f, 0.8f).normalized;
+                        metal = 0.15f;
+                        smooth = 0.98f;
+                    }
+                }
+                else if (shapeType == "LOCKET")
+                {
+                    float starR = 0.62f + Mathf.Cos(Mathf.Atan2(dy, dx) * 8f) * 0.12f;
+                    if (dist < starR)
+                    {
+                        albedo = new Color(0.98f, 0.82f, 0.32f, 1f);
+                        norm = new Vector3(dx * 0.8f, dy * 0.8f, 0.9f).normalized;
+                        metal = 0.90f;
+                        smooth = 0.85f;
+                        if (dist < 0.36f)
+                        {
+                            albedo = new Color(0.12f, 0.32f, 0.70f, 1f);
+                            metal = 0.30f;
+                            smooth = 0.92f;
+                        }
+                    }
+                }
+                else if (shapeType == "CROSS")
+                {
+                    bool inV = Mathf.Abs(dx) < 0.22f && Mathf.Abs(dy) < 0.78f;
+                    bool inH = Mathf.Abs(dy - 0.10f) < 0.22f && Mathf.Abs(dx) < 0.65f;
+                    if (inV || inH)
+                    {
+                        albedo = new Color(0.94f, 0.76f, 0.26f, 1f);
+                        norm = new Vector3(dx * 0.7f, dy * 0.7f, 0.9f).normalized;
+                        metal = 0.88f;
+                        smooth = 0.82f;
+                        if (dist < 0.20f)
+                        {
+                            albedo = new Color(0.18f, 0.28f, 0.85f, 1f);
+                            metal = 0.25f;
+                            smooth = 0.96f;
+                        }
+                    }
+                }
+
+                if (albedo.a > 0.05f)
+                {
+                    cols[idx] = EvaluatePBRPixel(albedo, norm, metal, smooth, lightDir);
+                }
+                else
+                {
+                    cols[idx] = Color.clear;
+                }
+            }
+        }
+
+        tex.SetPixels(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
     }
 
     private Sprite CreatePBRFrameSprite(int w, int h, float radius, Color innerCol, Color brassCol)
@@ -1756,9 +1889,18 @@ public class LuaBootstrapper : MonoBehaviour
     private void BuildUpgradesOverlay(Transform parent)
     {
         upgradesOverlay = CreatePanel(parent, "UpgradesOverlay", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 4), new Vector2(1060, 520), spBeveledPanel, true, true);
-        CreateText(upgradesOverlay.transform, "Header", "СТЕНД МАСТЕРА — ОБОРУДОВАНИЕ И КВАЛИФИКАЦИЯ", 20, new Color(0.98f, 0.88f, 0.60f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -34), new Vector2(-40, 40), TextAnchor.MiddleCenter, true);
+        CreateText(upgradesOverlay.transform, "Header", "СТЕНД МАСТЕРА — ОБОРУДОВАНИЕ И МУЗЕЙНАЯ ВИТРИНА", 20, new Color(0.98f, 0.88f, 0.60f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -26), new Vector2(-40, 36), TextAnchor.MiddleCenter, true);
 
-        upgStatusText = CreateText(upgradesOverlay.transform, "StatusTxt", "", 15, new Color(0.84f, 0.96f, 0.84f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -72), new Vector2(-60, 32), TextAnchor.MiddleCenter, true);
+        CreateButton(upgradesOverlay.transform, "TabEquipBtn", "✦ ОБОРУДОВАНИЕ И СЕРТИФИКАТЫ", new Vector2(-220, 202), new Vector2(340, 34), new Color(0.38f, 0.52f, 0.36f, 1f), () => {
+            SelectMasterStandTab(0);
+        }, out _, out upgTabBtnEquipImg);
+
+        CreateButton(upgradesOverlay.transform, "TabGalleryBtn", "🏛 МУЗЕЙНАЯ ГАЛЕРЕЯ ШЕДЕВРОВ", new Vector2(220, 202), new Vector2(340, 34), new Color(0.24f, 0.20f, 0.18f, 1f), () => {
+            SelectMasterStandTab(1);
+        }, out _, out upgTabBtnGalleryImg);
+
+        upgEquipContainer = CreatePanel(upgradesOverlay.transform, "EquipTabContainer", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -10), new Vector2(1000, 400));
+        upgStatusText = CreateText(upgEquipContainer.transform, "StatusTxt", "", 15, new Color(0.84f, 0.96f, 0.84f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -18), new Vector2(-60, 30), TextAnchor.MiddleCenter, true);
 
         string[] titles = {
             "1. Алмазные микро-насадки — 800 руб.\nУвеличивают радиус очистки и скорость стачивания зазубрин на +40%.",
@@ -1770,8 +1912,8 @@ public class LuaBootstrapper : MonoBehaviour
         for (int i = 0; i < 4; i++)
         {
             int idx = i;
-            float yPos = 105f - i * 74f;
-            GameObject row = CreatePanel(upgradesOverlay.transform, "UpgRow_" + i, new Color(0.24f, 0.18f, 0.14f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, yPos), new Vector2(960, 64), spBeveledButton, true, true);
+            float yPos = 135f - i * 72f;
+            GameObject row = CreatePanel(upgEquipContainer.transform, "UpgRow_" + i, new Color(0.24f, 0.18f, 0.14f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, yPos), new Vector2(960, 62), spBeveledButton, true, true);
             GameObject badgeGO = CreatePanel(row.transform, "Badge_" + i, Color.white, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(40f, 0f), new Vector2(46f, 46f), spWaxSealBadge, false, true);
             badgeGO.GetComponent<Image>().raycastTarget = false;
             upgBadgeImgs[i] = badgeGO.GetComponent<Image>();
@@ -1785,11 +1927,108 @@ public class LuaBootstrapper : MonoBehaviour
             }, out upgBtnLabels[i], out upgBtnImgs[i]);
         }
 
-        CreateButton(upgradesOverlay.transform, "CloseUpgBtn", "← Вернуться в мастерскую", new Vector2(0, -212), new Vector2(340, 44), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
+        upgGalleryContainer = CreatePanel(upgradesOverlay.transform, "GalleryTabContainer", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -10), new Vector2(1000, 400));
+        galleryStatusText = CreateText(upgGalleryContainer.transform, "GalStatus", "", 15, new Color(0.98f, 0.90f, 0.65f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -18), new Vector2(-60, 30), TextAnchor.MiddleCenter, true);
+
+        for (int i = 0; i < 4; i++)
+        {
+            int idx = i;
+            float xPos = (i - 1.5f) * 238f;
+            GameObject card = CreatePanel(upgGalleryContainer.transform, "RelicCard_" + i, new Color(0.20f, 0.16f, 0.13f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(xPos, -20), new Vector2(228, 296), spBeveledPanel, true, true);
+            GameObject iconGO = CreatePanel(card.transform, "Icon", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 56), new Vector2(108, 108));
+            iconGO.GetComponent<Image>().raycastTarget = false;
+            galleryCardIcons[i] = iconGO.GetComponent<Image>();
+
+            galleryCardTitles[i] = CreateText(card.transform, "Title", "", 14, new Color(1f, 0.92f, 0.68f, 1f), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, -18), new Vector2(-16, 28), TextAnchor.MiddleCenter, true);
+            galleryCardBadges[i] = CreateText(card.transform, "Badge", "", 12, new Color(0.78f, 0.92f, 0.80f, 1f), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, -48), new Vector2(-16, 24), TextAnchor.MiddleCenter, true);
+            galleryCardLores[i] = CreateText(card.transform, "Lore", "", 11, new Color(0.90f, 0.88f, 0.84f, 1f), new Vector2(0, 0), new Vector2(1, 0.5f), new Vector2(0, 14), new Vector2(-20, -56), TextAnchor.UpperCenter);
+
+            CreateButton(card.transform, "InspectBtn", "Осмотреть", new Vector2(0, -114), new Vector2(188, 30), new Color(0.32f, 0.44f, 0.36f, 1f), () => {
+                InspectGalleryRelic(idx);
+            }, out _, out _);
+        }
+
+        upgGalleryContainer.SetActive(false);
+
+        CreateButton(upgradesOverlay.transform, "CloseUpgBtn", "← Вернуться в мастерскую", new Vector2(0, -222), new Vector2(340, 38), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
             SetViewState("ROOM");
         }, out _, out _);
 
         upgradesOverlay.SetActive(false);
+    }
+
+    private void SelectMasterStandTab(int tab)
+    {
+        bool isEquip = (tab == 0);
+        upgEquipContainer.SetActive(isEquip);
+        upgGalleryContainer.SetActive(!isEquip);
+        upgTabBtnEquipImg.color = isEquip ? new Color(0.38f, 0.52f, 0.36f, 1f) : new Color(0.24f, 0.20f, 0.18f, 1f);
+        upgTabBtnGalleryImg.color = !isEquip ? new Color(0.38f, 0.52f, 0.36f, 1f) : new Color(0.24f, 0.20f, 0.18f, 1f);
+        PlaySFX(clipToolSwitch, 0.4f, isEquip ? 1.0f : 1.25f);
+        if (!isEquip) RefreshGalleryView();
+        else RefreshUpgradesUI();
+    }
+
+    private void RefreshGalleryView()
+    {
+        string[] shapes = { "RING", "DIAMOND", "LOCKET", "CROSS" };
+        Sprite[] iconSprites = { spGalleryRing, spGalleryDiamond, spGalleryLocket, spGalleryCross };
+        string[] titles = {
+            "Золотой перстень 1812 г.",
+            "Платиновый солитер",
+            "Орден Фаберже",
+            "Византийский энколпион"
+        };
+        string[] lores = {
+            "Тайник декабристов с шифром в безеле сохранен.",
+            "Королевская огранка очищена без микротрещин.",
+            "Горячая гильошированная эмаль восстановлена.",
+            "Древнейшая золотая скань и сапфир укреплены."
+        };
+
+        int completed = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            bool isDone = completedOrderTypes.Contains(shapes[i]);
+            if (isDone) completed++;
+
+            galleryCardTitles[i].text = titles[i];
+            if (isDone)
+            {
+                galleryCardIcons[i].sprite = iconSprites[i];
+                galleryCardIcons[i].color = Color.white;
+                galleryCardBadges[i].text = "★ ОТРЕСТАВРИРОВАНО";
+                galleryCardBadges[i].color = new Color(0.98f, 0.88f, 0.40f, 1f);
+                galleryCardLores[i].text = lores[i];
+            }
+            else
+            {
+                galleryCardIcons[i].sprite = spWaxSealBadge;
+                galleryCardIcons[i].color = new Color(0.40f, 0.40f, 0.40f, 0.6f);
+                galleryCardBadges[i].text = "🔒 В ПОИСКЕ";
+                galleryCardBadges[i].color = new Color(0.70f, 0.70f, 0.70f, 0.7f);
+                galleryCardLores[i].text = "Ожидает спасения через Окно заказов.";
+            }
+        }
+
+        galleryStatusText.text = $"ШЕДЕВРОВ В КОЛЛЕКЦИИ: {completed} ИЗ 4 • ПРЕСТИЖ ГИЛЬДИИ: {completed * 25}%";
+    }
+
+    private void InspectGalleryRelic(int idx)
+    {
+        string[] shapes = { "RING", "DIAMOND", "LOCKET", "CROSS" };
+        string[] titles = { "Золотой перстень 1812 года", "Платиновый солитер с бриллиантом", "Императорский орден Фаберже", "Византийский энколпион XII века" };
+        bool isDone = completedOrderTypes.Contains(shapes[idx]);
+        if (isDone)
+        {
+            PlaySFX(clipCrystalChime, 0.75f, 1.2f + idx * 0.15f);
+            bottomHintText.text = $"Музейная экспертиза: {titles[idx]} находится в безупречном эталонном состоянии!";
+        }
+        else
+        {
+            PlaySFX(clipFail, 0.5f, 1.0f);
+            bottomHintText.text = $"Шедевр «{titles[idx]}» еще не отреставрирован. Примите заказ в Окне заказов!";
+        }
     }
 
     private void BuildWorkbenchOverlay(Transform parent)
@@ -1801,6 +2040,9 @@ public class LuaBootstrapper : MonoBehaviour
         benchProgressText = CreateText(leftLog.transform, "ProgTxt", "", 14, new Color(0.76f, 0.96f, 0.80f, 1f), new Vector2(0, 0), new Vector2(1, 0.30f), new Vector2(0, 14), new Vector2(-26, -12), TextAnchor.LowerLeft, true);
 
         GameObject centerMat = CreatePanel(workbenchOverlay.transform, "CenterMat", new Color(0.15f, 0.34f, 0.22f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 24), new Vector2(394, 394), spBeveledPanel, true, true);
+        CreateButton(centerMat.transform, "BenchZoomBtn", "🔍 100%", new Vector2(140, 172), new Vector2(88, 30), new Color(0.24f, 0.38f, 0.32f, 1f), () => {
+            CycleBenchZoom();
+        }, out benchZoomBtnText, out _);
         GameObject surfGO = CreatePanel(centerMat.transform, "ItemSurface", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360, 360));
         itemSurfaceRT = surfGO.GetComponent<RectTransform>();
         itemSurfaceImg = surfGO.GetComponent<Image>();
@@ -1866,6 +2108,14 @@ public class LuaBootstrapper : MonoBehaviour
         }, out _, out _);
 
         workbenchOverlay.SetActive(false);
+    }
+
+    private void CycleBenchZoom()
+    {
+        if (targetBenchZoom < 1.35f) targetBenchZoom = 1.5f;
+        else if (targetBenchZoom < 1.75f) targetBenchZoom = 2.0f;
+        else targetBenchZoom = 1.0f;
+        PlaySFX(clipToolSwitch, 0.45f, 1.25f);
     }
 
     private void SelectBenchTool(string toolId)
@@ -2453,6 +2703,18 @@ public class LuaBootstrapper : MonoBehaviour
         cabinetOverlay.SetActive(newState == "CABINET");
         upgradesOverlay.SetActive(newState == "UPGRADES");
         modalOverlay.SetActive(newState == "TWIST" || newState == "RESULT" || newState == "FINALE");
+
+        if (newState != "WORKBENCH")
+        {
+            targetBenchZoom = 1.0f;
+            benchZoom = 1.0f;
+            if (itemSurfaceRT != null) itemSurfaceRT.localScale = Vector3.one;
+            if (benchZoomBtnText != null) benchZoomBtnText.text = "🔍 100%";
+        }
+        if (newState == "UPGRADES")
+        {
+            SelectMasterStandTab(0);
+        }
 
         if (newState == "WORKBENCH")
         {
@@ -3074,6 +3336,18 @@ public class LuaBootstrapper : MonoBehaviour
         }
         else if (viewState == "WORKBENCH")
         {
+            float scroll = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(scroll) > 0.05f)
+            {
+                targetBenchZoom = Mathf.Clamp(targetBenchZoom + scroll * 0.25f, 1.0f, 2.0f);
+            }
+            benchZoom = Mathf.Lerp(benchZoom, targetBenchZoom, dt * 10f);
+            itemSurfaceRT.localScale = new Vector3(benchZoom, benchZoom, 1f);
+            if (benchZoomBtnText != null)
+            {
+                benchZoomBtnText.text = $"🔍 {Mathf.RoundToInt(benchZoom * 100f)}%";
+            }
+
             bool isInside = RectTransformUtility.ScreenPointToLocalPointInRectangle(itemSurfaceRT, mousePos, null, out Vector2 localPt);
 
             float localDist = 0f;
