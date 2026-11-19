@@ -1644,7 +1644,7 @@ public class LuaBootstrapper : MonoBehaviour
         string tip = (stationId == "WINDOW") ? "ОКНО ЗАКАЗОВ (ЛКМ): Выбрать старинное украшение или сдать готовую работу заказчику." :
                      ((stationId == "WORKBENCH") ? "РАБОЧИЙ СТОЛ (ЛКМ): Диагностика дефектов под лупой и 4 этапа ручной реставрации." :
                      ((stationId == "CABINET") ? "ШКАФ ИНСТРУМЕНТОВ (ЛКМ): Подбор ювелирных насадок, химии и финишного стиля." :
-                     "СТЕНД МАСТЕРА (ЛКМ): Покупка алмазных насадок, стабилизатора и повышение разряда."));
+                     "СТЕНД МАСТЕРА И МУЗЕЙ (ЛКМ): Инструменты, сертификаты разрядов и Галерея отреставрированных шедевров."));
 
         EventTrigger trigger = stationGO.AddComponent<EventTrigger>();
         EventTrigger.Entry enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
@@ -1738,7 +1738,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject upgStation = CreatePanel(roomAreaRT, "Station_Upgrades", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(475, -135), new Vector2(240, 170), spStationMasterStand, false, true);
         AddStationClickTrigger(upgStation, posUpgradesInteract, "UPGRADES");
-        CreateText(upgStation.transform, "UpgTitle", "СТЕНД МАСТЕРА", 17, new Color(1f, 0.92f, 0.62f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -52), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
+        CreateText(upgStation.transform, "UpgTitle", "СТЕНД МАСТЕРА / МУЗЕЙ", 16, new Color(1f, 0.92f, 0.62f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -52), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
 
         GameObject markerGO = CreatePanel(roomAreaRT, "ClickMarker", new Color(1f, 0.88f, 0.35f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(36, 36), spWaxSealBadge);
         markerGO.GetComponent<Image>().raycastTarget = false;
