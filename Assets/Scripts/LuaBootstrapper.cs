@@ -54,7 +54,7 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch, clipPurr;
     private bool isMuted = false;
     private Text muteBtnText;
 
@@ -200,7 +200,8 @@ public class LuaBootstrapper : MonoBehaviour
     private GameObject modalSealGO;
 
     private Sprite spBeveledPanel, spBeveledButton, spWaxSealBadge, spSoftLightGlow, spLoupeLens, spTargetClamp, spTimerRing;
-    private Sprite spStationWindow, spStationWorkbench, spStationCabinet, spStationMasterStand, spArtisanChar;
+    private Sprite spStationWindow, spStationWorkbench, spStationCabinet, spStationMasterStand, spArtisanChar, spWorkshopCat;
+    private RectTransform catRT;
 
     void Start()
     {
@@ -272,6 +273,7 @@ public class LuaBootstrapper : MonoBehaviour
         clipClockTick   = LoadOrSynthesize("Audio/clock",  SynthesizeClockTickClip);
         clipCrystalChime = LoadOrSynthesize("Audio/chime", SynthesizeCrystalChimeClip);
         clipToolSwitch  = LoadOrSynthesize("Audio/switch", SynthesizeToolSwitchClip);
+        clipPurr        = LoadOrSynthesize("Audio/purr",   SynthesizePurrClip);
 
         if (clipClockTick != null)
         {
@@ -493,6 +495,26 @@ public class LuaBootstrapper : MonoBehaviour
         return c;
     }
 
+    private AudioClip SynthesizePurrClip()
+    {
+        int sr = 44100;
+        int len = Mathf.FloorToInt(sr * 1.35f);
+        float[] data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            float purrRhythm = Mathf.Sin(2f * Mathf.PI * 23f * t);
+            float purrMod = Mathf.Max(0f, purrRhythm);
+            float tone = Mathf.Sin(2f * Mathf.PI * 72f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 144f * t) * 0.35f;
+            float breath = Mathf.Sin(2f * Mathf.PI * 1.5f * t) * 0.5f + 0.5f;
+            float env = Mathf.Sin(Mathf.PI * (t / 1.35f));
+            data[i] = tone * purrMod * breath * env * 0.55f;
+        }
+        AudioClip c = AudioClip.Create("ProcPurr", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
     private AudioClip SynthesizeToolSwitchClip()
     {
         int sr = 44100;
@@ -599,6 +621,69 @@ public class LuaBootstrapper : MonoBehaviour
         spGalleryDiamond     = CreateRelicIconSprite("DIAMOND", 128);
         spGalleryLocket      = CreateRelicIconSprite("LOCKET", 128);
         spGalleryCross       = CreateRelicIconSprite("CROSS", 128);
+        spWorkshopCat        = CreateWorkshopCatSprite(110, 80);
+    }
+
+    private Sprite CreateWorkshopCatSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        float cx = w * 0.5f;
+        float cy = h * 0.44f;
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float dx = (x - cx) / (w * 0.5f);
+                float dy = (y - cy) / (h * 0.5f);
+                float distPillow = (dx * dx) / 0.85f + (dy * dy) / 0.55f;
+                Color col = Color.clear;
+
+                if (distPillow < 0.95f)
+                {
+                    col = new Color(0.22f, 0.12f, 0.14f, 0.85f);
+                }
+
+                float catDx = dx + 0.04f;
+                float catDy = dy + 0.08f;
+                float bodyDist = (catDx * catDx) / 0.48f + (catDy * catDy) / 0.28f;
+                if (bodyDist < 0.92f)
+                {
+                    float shade = Mathf.Clamp01(1f - bodyDist);
+                    col = Color.Lerp(new Color(0.78f, 0.45f, 0.18f, 1f), new Color(0.96f, 0.68f, 0.32f, 1f), shade + dy * 0.25f);
+                    if (Mathf.Sin(x * 0.35f) > 0.65f)
+                    {
+                        col *= 0.82f;
+                    }
+                }
+
+                float headDx = (dx - 0.28f) / 0.24f;
+                float headDy = (dy - 0.18f) / 0.24f;
+                float headDist = headDx * headDx + headDy * headDy;
+                if (headDist < 0.90f)
+                {
+                    col = new Color(0.92f, 0.62f, 0.28f, 1f);
+                    if (Mathf.Abs(headDy + 0.08f) < 0.18f && Mathf.Abs(headDx) > 0.15f && Mathf.Abs(headDx) < 0.55f)
+                    {
+                        col = new Color(0.20f, 0.12f, 0.08f, 1f);
+                    }
+                }
+
+                bool leftEar = (dx > 0.14f && dx < 0.26f && dy > 0.34f && dy < 0.52f);
+                bool rightEar = (dx > 0.36f && dx < 0.48f && dy > 0.34f && dy < 0.52f);
+                if (leftEar || rightEar)
+                {
+                    col = new Color(0.85f, 0.52f, 0.24f, 1f);
+                }
+
+                cols[y * w + x] = col;
+            }
+        }
+
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
     }
 
     private Sprite CreateRelicIconSprite(string shapeType, int size)
@@ -1743,6 +1828,23 @@ public class LuaBootstrapper : MonoBehaviour
         GameObject upgStation = CreatePanel(roomAreaRT, "Station_Upgrades", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(475, -135), new Vector2(240, 170), spStationMasterStand, false, true);
         AddStationClickTrigger(upgStation, posUpgradesInteract, "UPGRADES");
         CreateText(upgStation.transform, "UpgTitle", "СТЕНД МАСТЕРА / МУЗЕЙ", 16, new Color(1f, 0.92f, 0.62f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -52), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
+
+        GameObject catStation = CreatePanel(roomAreaRT, "Station_Cat", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-235, -180), new Vector2(100, 72), spWorkshopCat, false, true);
+        catRT = catStation.GetComponent<RectTransform>();
+        Button catBtn = catStation.AddComponent<Button>();
+        catBtn.onClick.AddListener(() => {
+            if (viewState == "ROOM")
+            {
+                PlaySFX(clipPurr, 0.85f, 1.0f);
+                catRT.localScale = new Vector3(1.18f, 0.88f, 1f);
+                EmitSparks(new Vector2(-235, -180), 8, new Color(1f, 0.88f, 0.60f, 1f));
+                overScrubDamage = Mathf.Max(0f, overScrubDamage - 3f);
+                SpawnFloatingText(new Vector2(-235, -145), "Мурр... Спокойствие рук +10%", new Color(1f, 0.90f, 0.65f, 1f));
+                bottomHintText.text = "Кот Барсик уютно замурчал. Рука мастера спокойна, дыхание ровное!";
+                UpdateTopBar();
+            }
+        });
+        CreateText(catStation.transform, "CatName", "Кот Барсик", 12, new Color(1f, 0.92f, 0.72f, 0.9f), new Vector2(0, 0), new Vector2(1, 0.35f), Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
 
         GameObject markerGO = CreatePanel(roomAreaRT, "ClickMarker", new Color(1f, 0.88f, 0.35f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(36, 36), spWaxSealBadge);
         markerGO.GetComponent<Image>().raycastTarget = false;
@@ -3373,6 +3475,7 @@ public class LuaBootstrapper : MonoBehaviour
         UpdateFloatingTexts(dt);
         UpdateClickNodesDecay(dt);
         UpdateDustMotes(dt);
+        if (catRT != null) catRT.localScale = Vector3.Lerp(catRT.localScale, Vector3.one, dt * 6f);
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
