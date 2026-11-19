@@ -2494,8 +2494,24 @@ public class LuaBootstrapper : MonoBehaviour
         }
         benchItemPreviewImg.color = (activeOrder != null) ? Color.white : Color.clear;
 
+        int prevC = cleanProgress;
+        int prevG = grindProgress;
         cleanProgress = (totalDirt > 0) ? Mathf.FloorToInt((cleanedDirt / (float)totalDirt) * 100f) : 100;
         grindProgress = (totalBurr > 0) ? Mathf.FloorToInt((fixedBurr / (float)totalBurr) * 100f) : 100;
+
+        if (orderStage == "READY_TO_RESTORE")
+        {
+            if (prevC < 75 && cleanProgress >= 75)
+            {
+                PlaySFX(clipCrystalChime, 0.75f, 1.25f);
+                bottomHintText.text = "ОЧИСТКА ВЫПОЛНЕНА! Теперь переключитесь на 2. Шлифовка (рывками) или продолжайте до 100%.";
+            }
+            if (prevG < 75 && grindProgress >= 75)
+            {
+                PlaySFX(clipCrystalChime, 0.75f, 1.35f);
+                bottomHintText.text = "ШЛИФОВКА ВЫПОЛНЕНА! Перейдите к 3. Закрепка узлов кликами или доведите до 100%.";
+            }
+        }
     }
 
     // =========================================================================
