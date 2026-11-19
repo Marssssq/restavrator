@@ -54,9 +54,37 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch, clipPurr;
+    private AudioSource musicSource;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch, clipPurr, clipHearthFire;
+    private AudioClip clipClassicalTheme;
     private bool isMuted = false;
     private Text muteBtnText;
+    private Image muteBtnImg;
+
+    private class FireplaceSpark
+    {
+        public RectTransform rt;
+        public Image img;
+        public Vector2 pos, vel;
+        public float life, maxLife, wobblePhase;
+    }
+    private List<FireplaceSpark> fireplaceSparks = new List<FireplaceSpark>();
+    private Transform fireplaceSparkContainer;
+    private Image fireplaceGlowImg, ambientTintImg;
+    private float fireplaceStokeTimer = 0f;
+    private RectTransform[] flameTongueRTs = new RectTransform[5];
+    private Vector2[] flameBaseSizes = new Vector2[5];
+    private float[] flameFrequencies = new float[5];
+    private float[] flamePhases = new float[5];
+    private readonly Vector2 posFireplaceInteract = new Vector2(-270f, 84f);
+
+    private RectTransform clockWidgetRT, hourHandRT, minuteHandRT, clockPhaseFillRT;
+    private Text clockPhaseText, clockDigitalText;
+    private Image[] clockPhaseGemImgs = new Image[4];
+
+    private Vector3 catClickScale = Vector3.one;
+    private RectTransform catTailRT, catLeftEarRT, catRightEarRT;
+    private RectTransform candleFlameBenchRT;
 
     private class DiagZone
     {
@@ -158,6 +186,7 @@ public class LuaBootstrapper : MonoBehaviour
     private Text benchLogText, benchProgressText, benchModeNoticeText, speedBarLabelText;
     private Button btnGoToCabinetFromBench;
     private Image[] benchToolBtnImgs = new Image[4];
+    private Text[] benchToolBtnTexts = new Text[4];
     private Image btnDoneImg;
     private Text btnDoneText;
     private float benchZoom = 1.0f;
@@ -201,10 +230,45 @@ public class LuaBootstrapper : MonoBehaviour
 
     private Sprite spBeveledPanel, spBeveledButton, spWaxSealBadge, spSoftLightGlow, spLoupeLens, spTargetClamp, spTimerRing;
     private Sprite spStationWindow, spStationWorkbench, spStationCabinet, spStationMasterStand, spArtisanChar, spWorkshopCat;
+    private Sprite spClockDial, spHourHand, spMinuteHand, spFireplace, spFlameTongue, spCandleStick, spCatTail, spCatEarLeft, spCatEarRight;
     private RectTransform catRT;
+    public static LuaBootstrapper Instance { get; private set; }
+
+    private void Awake()
+    {
+        Instance = this;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void AutoEnsureWorkshopBootstrap()
+    {
+        if (Application.isPlaying && FindAnyObjectByType<LuaBootstrapper>() == null)
+        {
+            if (Camera.main == null && FindAnyObjectByType<Camera>() == null)
+            {
+                GameObject camGO = new GameObject("Main Camera");
+                Camera cam = camGO.AddComponent<Camera>();
+                cam.tag = "MainCamera";
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.08f, 0.06f, 0.05f, 1f);
+                camGO.AddComponent<AudioListener>();
+            }
+            GameObject go = new GameObject("GameManager");
+            go.AddComponent<LuaBootstrapper>();
+        }
+    }
 
     void Start()
     {
+        if (Camera.main != null)
+        {
+            Camera.main.clearFlags = CameraClearFlags.SolidColor;
+            Camera.main.backgroundColor = new Color(0.08f, 0.06f, 0.05f, 1f);
+        }
+        if (TimeController.Instance == null)
+        {
+            gameObject.AddComponent<TimeController>();
+        }
         QualitySettings.antiAliasing = 4;
         Application.targetFrameRate = 120;
 
@@ -218,6 +282,7 @@ public class LuaBootstrapper : MonoBehaviour
 
     void OnDestroy()
     {
+        if (Instance == this) Instance = null;
         if (itemTex != null) Destroy(itemTex);
         foreach (var t in createdTextures)
         {
@@ -262,6 +327,11 @@ public class LuaBootstrapper : MonoBehaviour
         ambientSource.loop = true;
         ambientSource.volume = 0.20f;
 
+        musicSource = gameObject.AddComponent<AudioSource>();
+        musicSource.playOnAwake = false;
+        musicSource.loop = true;
+        musicSource.volume = 0.24f;
+
         clipBell        = LoadOrSynthesize("Audio/bell",   SynthesizeBellClip);
         clipStep        = LoadOrSynthesize("Audio/step",   SynthesizeStepClip);
         clipClickPin    = LoadOrSynthesize("Audio/click",  SynthesizeClickClip);
@@ -274,6 +344,14 @@ public class LuaBootstrapper : MonoBehaviour
         clipCrystalChime = LoadOrSynthesize("Audio/chime", SynthesizeCrystalChimeClip);
         clipToolSwitch  = LoadOrSynthesize("Audio/switch", SynthesizeToolSwitchClip);
         clipPurr        = LoadOrSynthesize("Audio/purr",   SynthesizePurrClip);
+        clipHearthFire  = LoadOrSynthesize("Audio/hearth", SynthesizeHearthFireClip);
+
+        clipClassicalTheme = LoadOrSynthesize("Audio/classical_theme", SynthesizeClassicalTheme);
+        if (clipClassicalTheme != null)
+        {
+            musicSource.clip = clipClassicalTheme;
+            musicSource.Play();
+        }
 
         if (clipClockTick != null)
         {
@@ -302,7 +380,9 @@ public class LuaBootstrapper : MonoBehaviour
     {
         isMuted = !isMuted;
         AudioListener.volume = isMuted ? 0f : 1f;
-        if (muteBtnText != null) muteBtnText.text = isMuted ? "🔇" : "🔊";
+        if (muteBtnText != null) muteBtnText.text = isMuted ? "🔇 ВЫКЛ" : "🔊 ЗВУК";
+        if (muteBtnImg != null) muteBtnImg.color = isMuted ? new Color(0.38f, 0.16f, 0.16f, 1f) : new Color(0.24f, 0.18f, 0.14f, 1f);
+        if (!isMuted) PlaySFX(clipBell, 0.5f, 1.15f);
     }
 
     private AudioClip SynthesizeBellClip()
@@ -532,6 +612,66 @@ public class LuaBootstrapper : MonoBehaviour
         return c;
     }
 
+    public AudioClip SynthesizeClassicalTheme()
+    {
+        int sr = 44100;
+        int len = sr * 12;
+        float[] data = new float[len];
+
+        float[] bassFreqs = { 110.0f, 87.31f, 73.42f, 82.41f };
+        float[] melodyFreqs = { 659.25f, 523.25f, 493.88f, 523.25f, 440.0f, 415.30f, 440.0f, 493.88f, 523.25f, 659.25f, 587.33f, 493.88f };
+        float noteDur = len / (float)(melodyFreqs.Length * sr);
+
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            int barIdx = Mathf.Clamp(Mathf.FloorToInt(t / 3.0f), 0, 3);
+            float bassF = bassFreqs[barIdx];
+            float vibrato = Mathf.Sin(2f * Mathf.PI * 4.5f * t) * 1.8f;
+            float cello = Mathf.Sin(2f * Mathf.PI * (bassF + vibrato) * t) * 0.45f
+                        + Mathf.Sin(2f * Mathf.PI * (bassF * 2f) * t) * 0.22f
+                        + Mathf.Sin(2f * Mathf.PI * (bassF * 3f) * t) * 0.10f;
+
+            int melIdx = Mathf.Clamp(Mathf.FloorToInt(t / noteDur), 0, melodyFreqs.Length - 1);
+            float noteT = t - (melIdx * noteDur);
+            float melF = melodyFreqs[melIdx];
+            float melEnv = Mathf.Exp(-noteT * 3.2f);
+            float musicBox = (Mathf.Sin(2f * Mathf.PI * melF * t) * 0.50f
+                            + Mathf.Sin(2f * Mathf.PI * melF * 2f * t) * 0.25f
+                            + Mathf.Sin(2f * Mathf.PI * melF * 3f * t) * 0.12f) * melEnv;
+
+            float pianoT = t - Mathf.Floor(t);
+            float pianoEnv = Mathf.Exp(-pianoT * 4.5f);
+            float arpegF = bassF * 2f * (1f + (Mathf.Floor(pianoT * 4f) * 0.25f));
+            float piano = Mathf.Sin(2f * Mathf.PI * arpegF * t) * pianoEnv * 0.20f;
+
+            float mix = (cello * 0.32f) + (musicBox * 0.38f) + piano;
+            data[i] = Mathf.Clamp(mix, -0.92f, 0.92f);
+        }
+
+        AudioClip c = AudioClip.Create("ProcClassicalTheme", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
+    private AudioClip SynthesizeHearthFireClip()
+    {
+        int sr = 44100;
+        int len = Mathf.FloorToInt(sr * 1.5f);
+        float[] data = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = i / (float)sr;
+            float rumble = Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.2f + Mathf.Sin(2f * Mathf.PI * 110f * t) * 0.1f;
+            float crackle = (Random.value > 0.992f) ? (Random.value * 2f - 1f) * 0.65f : 0f;
+            float noise = (Random.value * 2f - 1f) * 0.08f;
+            data[i] = Mathf.Clamp(rumble + crackle + noise, -1f, 1f) * 0.5f;
+        }
+        AudioClip c = AudioClip.Create("ProcHearthFire", len, 1, sr, false);
+        c.SetData(data, 0);
+        return c;
+    }
+
     private Color EvaluatePBRPixel(Color albedo, Vector3 normal, float metallic, float smoothness, Vector3 lightDir)
     {
         normal.Normalize();
@@ -622,6 +762,349 @@ public class LuaBootstrapper : MonoBehaviour
         spGalleryLocket      = CreateRelicIconSprite("LOCKET", 128);
         spGalleryCross       = CreateRelicIconSprite("CROSS", 128);
         spWorkshopCat        = CreateWorkshopCatSprite(110, 80);
+        spClockDial          = CreateVictorianClockDialSprite(64);
+        spHourHand           = CreateVictorianClockHandSprite(8, 20, true);
+        spMinuteHand         = CreateVictorianClockHandSprite(6, 26, false);
+        spFireplace          = CreateFireplaceStationSprite(220, 180);
+        spFlameTongue        = CreateFlameTongueSprite(64, 128);
+        spCandleStick        = CreateCandleStickSprite(24, 48);
+        spCatTail            = CreateCatTailSprite(36, 48);
+        spCatEarLeft         = CreateCatEarSprite(18, 22, true);
+        spCatEarRight        = CreateCatEarSprite(18, 22, false);
+    }
+
+    private Sprite CreateVictorianClockDialSprite(int size)
+    {
+        Texture2D tex = CreateTrackedTexture(size, size);
+        Color32[] cols = new Color32[size * size];
+        Vector2 c = new Vector2(size * 0.5f, size * 0.5f);
+        float maxR = size * 0.47f;
+        Vector3 lightDir = new Vector3(-0.45f, 0.65f, 0.75f).normalized;
+        Color brassCol = new Color(0.92f, 0.75f, 0.30f, 1f);
+        Color ivoryFace = new Color(0.96f, 0.93f, 0.85f, 1f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - c.x;
+                float dy = y - c.y;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                float ang = Mathf.Atan2(dy, dx);
+                Color outCol = Color.clear;
+
+                if (dist <= maxR)
+                {
+                    float bezelThick = size * 0.12f;
+                    if (dist > maxR - bezelThick)
+                    {
+                        float t = (dist - (maxR - bezelThick)) / bezelThick;
+                        Vector3 norm = new Vector3(dx / maxR, dy / maxR, Mathf.Sin(t * Mathf.PI));
+                        float notch = Mathf.Sin(ang * 24f) * 0.08f;
+                        Color bCol = brassCol * (1f + notch);
+                        outCol = EvaluatePBRPixel(bCol, norm, 0.90f, 0.85f, lightDir);
+                        outCol.a = Mathf.Clamp01(maxR - dist + 0.8f);
+                    }
+                    else
+                    {
+                        float vig = Mathf.Clamp01(1.05f - (dist / maxR) * 0.28f);
+                        Color dial = ivoryFace * vig;
+
+                        float innerRingDist = Mathf.Abs(dist - maxR * 0.58f);
+                        if (innerRingDist < 1.2f)
+                        {
+                            dial = new Color(0.82f, 0.65f, 0.24f, 1f);
+                        }
+
+                        float angDeg = (ang * Mathf.Rad2Deg + 360f + 90f) % 360f;
+                        float tickMod = Mathf.Abs((angDeg % 30f) - 15f);
+                        if (dist > maxR * 0.68f && dist < maxR * 0.82f && (tickMod > 13.8f || tickMod < 1.2f))
+                        {
+                            dial = new Color(0.20f, 0.16f, 0.12f, 1f);
+                        }
+
+                        Vector3 faceNorm = new Vector3(0f, 0f, 1f);
+                        outCol = EvaluatePBRPixel(dial, faceNorm, 0.10f, 0.40f, lightDir);
+                    }
+                }
+                cols[y * size + x] = outCol;
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+    }
+
+    private Sprite CreateVictorianClockHandSprite(int w, int h, bool isHourHand)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        float cx = w * 0.5f;
+        Color handCol = isHourHand ? new Color(0.18f, 0.20f, 0.28f, 1f) : new Color(0.22f, 0.24f, 0.35f, 1f);
+        Color brassTrim = new Color(0.90f, 0.74f, 0.28f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            float taper = 1f - (y / (float)h) * 0.65f;
+            float maxW = (w * 0.38f) * taper;
+            if (isHourHand && y > h * 0.45f && y < h * 0.75f)
+            {
+                float spadeY = (y - h * 0.60f) / (h * 0.15f);
+                maxW = Mathf.Max(maxW, (w * 0.48f) * Mathf.Sqrt(Mathf.Max(0.01f, 1f - spadeY * spadeY)));
+            }
+
+            for (int x = 0; x < w; x++)
+            {
+                float dx = Mathf.Abs(x - cx);
+                if (dx <= maxW && y >= 2)
+                {
+                    Color c = (dx > maxW - 1.2f) ? brassTrim : handCol;
+                    cols[y * w + x] = c;
+                }
+                else
+                {
+                    cols[y * w + x] = Color.clear;
+                }
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.12f));
+    }
+
+    private Sprite CreateFireplaceStationSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        Vector3 lightDir = new Vector3(-0.35f, 0.65f, 0.75f).normalized;
+        Color brickBase = new Color(0.48f, 0.22f, 0.16f, 1f);
+        Color mortarCol = new Color(0.65f, 0.60f, 0.54f, 1f);
+        Color mantelWood = new Color(0.26f, 0.14f, 0.08f, 1f);
+        Color brassTrim = new Color(0.85f, 0.68f, 0.25f, 1f);
+        Color ironCol = new Color(0.18f, 0.17f, 0.16f, 1f);
+        Color fireboxInner = new Color(0.08f, 0.07f, 0.06f, 1f);
+
+        float cx = w * 0.5f;
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float dx = x - cx;
+                Color albedo = brickBase;
+                Vector3 norm = new Vector3(0f, 0f, 1f);
+                float met = 0.05f;
+                float smooth = 0.25f;
+
+                if (y >= h - 22)
+                {
+                    albedo = (y >= h - 4 || y == h - 22) ? brassTrim : mantelWood;
+                    norm = new Vector3(0f, (y - (h - 11)) / 11f, 0.8f);
+                    met = (y >= h - 4 || y == h - 22) ? 0.85f : 0.2f;
+                    smooth = 0.7f;
+                }
+                else if (y < 12)
+                {
+                    albedo = ironCol;
+                    norm = new Vector3(0f, -0.4f, 0.9f);
+                    met = 0.7f;
+                    smooth = 0.5f;
+                }
+                else
+                {
+                    float archW = w * 0.38f;
+                    float archH = h * 0.65f;
+                    float boxY = y - 12f;
+                    bool insideHearth = (Mathf.Abs(dx) < archW && boxY < archH);
+                    if (insideHearth)
+                    {
+                        if (boxY > archH - 16f || Mathf.Abs(dx) > archW - 14f)
+                        {
+                            albedo = ironCol;
+                            norm = new Vector3(dx / archW, (boxY - archH) / 16f, 0.7f);
+                            met = 0.75f;
+                            smooth = 0.55f;
+                        }
+                        else
+                        {
+                            albedo = fireboxInner;
+                            if (boxY < 24f)
+                            {
+                                float logGlow = Mathf.Clamp01(1f - Mathf.Abs(dx) / (archW * 0.7f));
+                                albedo = Color.Lerp(fireboxInner, new Color(0.95f, 0.35f, 0.05f, 1f), logGlow * 0.65f);
+                            }
+                            norm = new Vector3(0f, 0f, 1f);
+                            met = 0.1f;
+                            smooth = 0.1f;
+                        }
+                    }
+                    else
+                    {
+                        int brickRow = Mathf.FloorToInt(y / 14f);
+                        float xOffset = (brickRow % 2 == 0) ? 0f : 14f;
+                        int brickCol = Mathf.FloorToInt((x + xOffset) / 28f);
+                        bool isMortar = (y % 14 == 0 || (x + xOffset) % 28 == 0);
+                        if (isMortar)
+                        {
+                            albedo = mortarCol;
+                            norm = new Vector3(0f, 0f, 0.7f);
+                        }
+                        else
+                        {
+                            float brickNoise = Mathf.Sin(brickCol * 3.7f + brickRow * 2.3f) * 0.08f;
+                            albedo = brickBase * (1f + brickNoise);
+                            norm = new Vector3(0f, 0f, 1f);
+                        }
+                    }
+                }
+
+                cols[y * w + x] = EvaluatePBRPixel(albedo, norm, met, smooth, lightDir);
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+    }
+
+    private Sprite CreateFlameTongueSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        float cx = w * 0.5f;
+
+        for (int y = 0; y < h; y++)
+        {
+            float ny = y / (float)h;
+            float halfW = (w * 0.45f) * Mathf.Sin(ny * Mathf.PI) * (1f - ny * 0.4f);
+            if (halfW < 0.5f) halfW = 0.5f;
+
+            for (int x = 0; x < w; x++)
+            {
+                float dx = Mathf.Abs(x - cx);
+                if (dx <= halfW)
+                {
+                    float t = dx / halfW;
+                    Color core = Color.Lerp(Color.white, new Color(1f, 0.88f, 0.35f, 1f), ny * 0.7f);
+                    Color rim = new Color(0.96f, 0.38f, 0.06f, 1f);
+                    Color c = Color.Lerp(core, rim, t);
+                    c.a = Mathf.Clamp01((1f - t) * 1.5f) * Mathf.Clamp01((1f - ny) * 2.5f);
+                    cols[y * w + x] = c;
+                }
+                else
+                {
+                    cols[y * w + x] = Color.clear;
+                }
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.0f));
+    }
+
+    private Sprite CreateCandleStickSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        float cx = w * 0.5f;
+        Color brassCol = new Color(0.88f, 0.72f, 0.28f, 1f);
+        Color waxCol = new Color(0.94f, 0.91f, 0.82f, 1f);
+        Color wickCol = new Color(0.2f, 0.18f, 0.16f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float dx = Mathf.Abs(x - cx);
+                Color c = Color.clear;
+                if (y < h * 0.28f)
+                {
+                    float baseW = (w * 0.45f) * (1f - (y / (h * 0.28f)) * 0.4f);
+                    if (dx <= baseW) c = brassCol;
+                }
+                else if (y < h * 0.88f)
+                {
+                    float shaftW = w * 0.22f;
+                    if (dx <= shaftW) c = waxCol;
+                }
+                else if (y < h * 0.98f)
+                {
+                    if (dx <= 1.2f) c = wickCol;
+                }
+                cols[y * w + x] = c;
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.0f));
+    }
+
+    private Sprite CreateCatTailSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        Color ginger = new Color(0.88f, 0.48f, 0.18f, 1f);
+        Color stripe = new Color(0.65f, 0.32f, 0.10f, 1f);
+        Color tip = new Color(0.96f, 0.90f, 0.78f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            float ny = y / (float)h;
+            float curveX = (w * 0.5f) + Mathf.Sin(ny * Mathf.PI * 0.85f) * (w * 0.32f);
+            float r = (w * 0.22f) * (1f - ny * 0.25f);
+
+            for (int x = 0; x < w; x++)
+            {
+                float d = Mathf.Abs(x - curveX);
+                if (d <= r)
+                {
+                    Color c = ginger;
+                    if (ny > 0.85f) c = tip;
+                    else if (Mathf.Sin(ny * 24f) > 0.35f) c = stripe;
+                    c.a = Mathf.Clamp01(r - d + 0.8f);
+                    cols[y * w + x] = c;
+                }
+                else
+                {
+                    cols[y * w + x] = Color.clear;
+                }
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.85f, 0.20f));
+    }
+
+    private Sprite CreateCatEarSprite(int w, int h, bool isLeft)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        Color ginger = new Color(0.88f, 0.48f, 0.18f, 1f);
+        Color inner = new Color(0.95f, 0.72f, 0.68f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            float ny = y / (float)h;
+            float maxW = (w * 0.5f) * (1f - ny);
+            float cx = w * 0.5f;
+
+            for (int x = 0; x < w; x++)
+            {
+                float dx = Mathf.Abs(x - cx);
+                if (dx <= maxW)
+                {
+                    Color c = (dx < maxW * 0.55f && ny < 0.75f) ? inner : ginger;
+                    c.a = Mathf.Clamp01(maxW - dx + 0.8f);
+                    cols[y * w + x] = c;
+                }
+                else
+                {
+                    cols[y * w + x] = Color.clear;
+                }
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.1f));
     }
 
     private Sprite CreateWorkshopCatSprite(int w, int h)
@@ -1702,11 +2185,67 @@ public class LuaBootstrapper : MonoBehaviour
         bgImg = go.GetComponent<Image>();
         Button btn = go.AddComponent<Button>();
         btn.targetGraphic = bgImg;
+        btn.transition = Selectable.Transition.ColorTint;
+        ColorBlock cb = btn.colors;
+        cb.normalColor = Color.white;
+        cb.highlightedColor = new Color(1.20f, 1.20f, 1.20f, 1f);
+        cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+        cb.selectedColor = Color.white;
+        cb.fadeDuration = 0.06f;
+        btn.colors = cb;
+
         labelTxt = CreateText(go.transform, "Label", label, 14, new Color(0.98f, 0.95f, 0.88f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-14, -6), TextAnchor.MiddleCenter, true);
         btn.onClick.AddListener(() => {
-            PlaySFX(clipClickPin, 0.4f, 1.0f);
             onClick();
         });
+
+        EventTrigger et = go.AddComponent<EventTrigger>();
+
+        EventTrigger.Entry pEnter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        pEnter.callback.AddListener((d) => {
+            go.transform.localScale = new Vector3(1.035f, 1.035f, 1f);
+            PlaySFX(clipStep, 0.08f, 2.4f);
+        });
+        et.triggers.Add(pEnter);
+
+        EventTrigger.Entry pExit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        pExit.callback.AddListener((d) => {
+            go.transform.localScale = Vector3.one;
+        });
+        et.triggers.Add(pExit);
+
+        EventTrigger.Entry pDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+        pDown.callback.AddListener((d) => {
+            go.transform.localScale = new Vector3(0.94f, 0.94f, 1f);
+            PlaySFX(clipClickPin, 0.45f, 1.0f);
+        });
+        et.triggers.Add(pDown);
+
+        EventTrigger.Entry pUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+        pUp.callback.AddListener((d) => {
+            go.transform.localScale = new Vector3(1.035f, 1.035f, 1f);
+            PlaySFX(clipClickPin, 0.22f, 1.35f);
+        });
+        et.triggers.Add(pUp);
+
+        return btn;
+    }
+
+    private Button AddCornerCloseButton(Transform parentOverlay, UnityEngine.Events.UnityAction onClose)
+    {
+        Button btn = CreateButton(parentOverlay, "CloseCornerBtn", "✕", Vector2.zero, new Vector2(38, 38), new Color(0.52f, 0.20f, 0.18f, 0.95f), () => {
+            PlaySFX(clipClickPin, 0.45f, 0.9f);
+            onClose();
+        }, out Text labelTxt, out _);
+        RectTransform rt = btn.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-16f, -16f);
+        labelTxt.fontSize = 20;
+        labelTxt.fontStyle = FontStyle.Bold;
+        labelTxt.color = new Color(1f, 0.94f, 0.82f, 1f);
+        TooltipTrigger.Attach(btn.gameObject, "OVERLAY_CLOSE_CORNER");
         return btn;
     }
 
@@ -1764,11 +2303,19 @@ public class LuaBootstrapper : MonoBehaviour
         cs.matchWidthOrHeight = 0.5f;
         canvasGO.AddComponent<GraphicRaycaster>();
 
+        GameObject tooltipGO = new GameObject("TooltipRoot");
+        tooltipGO.transform.SetParent(canvasGO.transform, false);
+        tooltipGO.AddComponent<TooltipManager>();
+
         GameObject rootBG = CreatePanel(canvasGO.transform, "RootBG", new Color(0.08f, 0.06f, 0.05f, 1f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
         Sprite woodSprite = CreateWoodFloorPBRSprite(512, 256);
         GameObject roomGO = CreatePanel(rootBG.transform, "RoomArea", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 4), new Vector2(1240, 580), woodSprite, false, true);
         roomAreaRT = roomGO.GetComponent<RectTransform>();
+
+        GameObject tintGO = CreatePanel(roomAreaRT, "AmbientTintOverlay", new Color(0.72f, 0.84f, 1f, 0.05f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        tintGO.GetComponent<Image>().raycastTarget = false;
+        ambientTintImg = tintGO.GetComponent<Image>();
 
         Sprite rugSprite = CreateOrnateRugPBRSprite(320, 160);
         GameObject rug = CreatePanel(roomAreaRT, "WorkshopRug", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-10, -45), new Vector2(540, 260), rugSprite, false, true);
@@ -1788,11 +2335,65 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject winStation = CreatePanel(roomAreaRT, "Station_Window", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-485, -15), new Vector2(220, 265), spStationWindow, false, true);
         AddStationClickTrigger(winStation, posWindowInteract, "WINDOW");
+        TooltipTrigger.Attach(winStation, "STATION_WINDOW");
         CreateText(winStation.transform, "WinTitle", "ОКНО ЗАКАЗОВ", 17, new Color(1f, 0.95f, 0.78f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -82), new Vector2(-12, -12), TextAnchor.MiddleCenter, true);
         GameObject winBadge = CreatePanel(winStation.transform, "Badge", new Color(0.25f, 0.92f, 0.38f, 1f), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-24, -22), new Vector2(32, 32), spWaxSealBadge, false, true);
         windowBadgeImg = winBadge.GetComponent<Image>();
         windowBadgeImg.raycastTarget = false;
         CreateText(winBadge.transform, "Excl", "!", 19, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
+
+        GameObject fireGlow = CreatePanel(roomAreaRT, "HearthGlow", new Color(1f, 0.65f, 0.28f, 0.32f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-270, 185), new Vector2(420, 390), spSoftLightGlow);
+        fireGlow.GetComponent<Image>().raycastTarget = false;
+        fireplaceGlowImg = fireGlow.GetComponent<Image>();
+
+        GameObject fireStation = CreatePanel(roomAreaRT, "Station_Fireplace", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-270, 195), new Vector2(220, 175), spFireplace, false, true);
+        AddStationClickTrigger(fireStation, posFireplaceInteract, "FIREPLACE");
+        TooltipTrigger.Attach(fireStation, "STATION_FIREPLACE");
+        CreateText(fireStation.transform, "FireplaceTitle", "ЧУГУННЫЙ КАМИН", 16, new Color(1f, 0.90f, 0.72f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -60), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
+
+        Vector2[] flamePos = { new Vector2(-10f, -22f), new Vector2(-30f, -26f), new Vector2(12f, -26f), new Vector2(-20f, -28f), new Vector2(2f, -28f) };
+        Vector2[] flameSizes = { new Vector2(32f, 54f), new Vector2(26f, 46f), new Vector2(26f, 46f), new Vector2(20f, 38f), new Vector2(20f, 38f) };
+        float[] flameFreqs = { 7.5f, 11.2f, 13.8f, 16.4f, 9.8f };
+        float[] flamePhs = { 0f, 1.4f, 2.8f, 4.2f, 0.7f };
+        for (int i = 0; i < 5; i++)
+        {
+            GameObject flm = CreatePanel(fireStation.transform, "FlameTongue_" + i, Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), flamePos[i], flameSizes[i], spFlameTongue);
+            flm.GetComponent<Image>().raycastTarget = false;
+            flameTongueRTs[i] = flm.GetComponent<RectTransform>();
+            flameBaseSizes[i] = flameSizes[i];
+            flameFrequencies[i] = flameFreqs[i];
+            flamePhases[i] = flamePhs[i];
+        }
+
+        GameObject candleMantelL = CreatePanel(fireStation.transform, "CandleMantelL", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-65f, 75f), new Vector2(14f, 28f), spCandleStick);
+        candleMantelL.GetComponent<Image>().raycastTarget = false;
+        GameObject cFlameML = CreatePanel(candleMantelL.transform, "Flame", new Color(1f, 0.92f, 0.45f, 0.95f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, 5f), new Vector2(7f, 12f), spFlameTongue);
+        cFlameML.GetComponent<Image>().raycastTarget = false;
+
+        GameObject candleMantelR = CreatePanel(fireStation.transform, "CandleMantelR", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(65f, 75f), new Vector2(14f, 28f), spCandleStick);
+        candleMantelR.GetComponent<Image>().raycastTarget = false;
+        GameObject cFlameMR = CreatePanel(candleMantelR.transform, "Flame", new Color(1f, 0.92f, 0.45f, 0.95f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, 5f), new Vector2(7f, 12f), spFlameTongue);
+        cFlameMR.GetComponent<Image>().raycastTarget = false;
+
+        GameObject sparksPoolRoot = CreatePanel(roomAreaRT, "FireplaceSparksRoot", new Color(1, 1, 1, 0), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-270f, 195f), new Vector2(200f, 200f));
+        sparksPoolRoot.GetComponent<Image>().raycastTarget = false;
+        fireplaceSparkContainer = sparksPoolRoot.transform;
+        fireplaceSparks.Clear();
+        for (int i = 0; i < 20; i++)
+        {
+            GameObject spkGO = CreatePanel(fireplaceSparkContainer, "Spark_" + i, new Color(1f, 0.85f, 0.35f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(5f, 5f), spSoftLightGlow);
+            spkGO.GetComponent<Image>().raycastTarget = false;
+            fireplaceSparks.Add(new FireplaceSpark
+            {
+                rt = spkGO.GetComponent<RectTransform>(),
+                img = spkGO.GetComponent<Image>(),
+                pos = Vector2.zero,
+                vel = Vector2.zero,
+                life = 0f,
+                maxLife = 1f,
+                wobblePhase = Random.Range(0f, Mathf.PI * 2f)
+            });
+        }
 
         GameObject benchGlow = CreatePanel(roomAreaRT, "BenchLampGlow", new Color(1f, 0.90f, 0.60f, 0.36f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 175), new Vector2(490, 360), spSoftLightGlow);
         benchGlow.GetComponent<Image>().raycastTarget = false;
@@ -1800,9 +2401,18 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject benchStation = CreatePanel(roomAreaRT, "Station_Workbench", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 195), new Vector2(350, 158), spStationWorkbench, false, true);
         AddStationClickTrigger(benchStation, posBenchInteract, "WORKBENCH");
+        TooltipTrigger.Attach(benchStation, "STATION_WORKBENCH");
         GameObject itemOnBench = CreatePanel(benchStation.transform, "ItemOnBench", new Color(1f, 1f, 1f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-50, 4), new Vector2(54, 54));
         benchItemPreviewImg = itemOnBench.GetComponent<Image>();
         benchItemPreviewImg.raycastTarget = false;
+
+        GameObject candleBench = CreatePanel(benchStation.transform, "BenchCandle", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(140f, 45f), new Vector2(16f, 32f), spCandleStick);
+        candleBench.GetComponent<Image>().raycastTarget = false;
+        GameObject candleBenchFlame = CreatePanel(candleBench.transform, "Flame", new Color(1f, 0.92f, 0.45f, 0.95f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, 6f), new Vector2(8f, 14f), spFlameTongue);
+        candleBenchFlame.GetComponent<Image>().raycastTarget = false;
+        candleFlameBenchRT = candleBenchFlame.GetComponent<RectTransform>();
+        GameObject candleBenchGlow = CreatePanel(candleBench.transform, "Glow", new Color(1f, 0.85f, 0.4f, 0.25f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, 6f), new Vector2(48f, 48f), spSoftLightGlow);
+        candleBenchGlow.GetComponent<Image>().raycastTarget = false;
 
         CreateText(benchStation.transform, "BenchTitle", "РАБОЧИЙ СТОЛ", 18, new Color(1f, 0.96f, 0.82f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -45), new Vector2(-16, -16), TextAnchor.MiddleCenter, true);
         GameObject benchBadge = CreatePanel(benchStation.transform, "Badge", new Color(0.25f, 0.92f, 0.38f, 1f), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-22, -20), new Vector2(32, 32), spWaxSealBadge, false, true);
@@ -1816,6 +2426,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject cabStation = CreatePanel(roomAreaRT, "Station_Cabinet", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(375, 195), new Vector2(300, 158), spStationCabinet, false, true);
         AddStationClickTrigger(cabStation, posCabinetInteract, "CABINET");
+        TooltipTrigger.Attach(cabStation, "STATION_CABINET");
         CreateText(cabStation.transform, "CabTitle", "ШКАФ ИНСТРУМЕНТОВ", 17, new Color(0.98f, 0.92f, 0.78f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -45), new Vector2(-16, -16), TextAnchor.MiddleCenter, true);
         GameObject cabBadge = CreatePanel(cabStation.transform, "Badge", new Color(0.25f, 0.92f, 0.38f, 1f), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-22, -20), new Vector2(32, 32), spWaxSealBadge, false, true);
         cabinetBadgeImg = cabBadge.GetComponent<Image>();
@@ -1827,15 +2438,34 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject upgStation = CreatePanel(roomAreaRT, "Station_Upgrades", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(475, -135), new Vector2(240, 170), spStationMasterStand, false, true);
         AddStationClickTrigger(upgStation, posUpgradesInteract, "UPGRADES");
+        TooltipTrigger.Attach(upgStation, "STATION_UPGRADES");
         CreateText(upgStation.transform, "UpgTitle", "СТЕНД МАСТЕРА / МУЗЕЙ", 16, new Color(1f, 0.92f, 0.62f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -52), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
 
         GameObject catStation = CreatePanel(roomAreaRT, "Station_Cat", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-235, -180), new Vector2(100, 72), spWorkshopCat, false, true);
+        TooltipTrigger.Attach(catStation, "STATION_CAT");
         catRT = catStation.GetComponent<RectTransform>();
+
+        GameObject catTailGO = CreatePanel(catStation.transform, "CatTail", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-34f, -14f), new Vector2(32f, 44f), spCatTail);
+        catTailGO.GetComponent<Image>().raycastTarget = false;
+        catTailRT = catTailGO.GetComponent<RectTransform>();
+        catTailRT.pivot = new Vector2(0.85f, 0.20f);
+
+        GameObject earL = CreatePanel(catStation.transform, "CatLeftEar", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(16f, 24f), new Vector2(18f, 22f), spCatEarLeft);
+        earL.GetComponent<Image>().raycastTarget = false;
+        catLeftEarRT = earL.GetComponent<RectTransform>();
+        catLeftEarRT.pivot = new Vector2(0.5f, 0.1f);
+
+        GameObject earR = CreatePanel(catStation.transform, "CatRightEar", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(34f, 24f), new Vector2(18f, 22f), spCatEarRight);
+        earR.GetComponent<Image>().raycastTarget = false;
+        catRightEarRT = earR.GetComponent<RectTransform>();
+        catRightEarRT.pivot = new Vector2(0.5f, 0.1f);
+
         Button catBtn = catStation.AddComponent<Button>();
         catBtn.onClick.AddListener(() => {
             if (viewState == "ROOM")
             {
                 PlaySFX(clipPurr, 0.85f, 1.0f);
+                catClickScale = new Vector3(1.18f, 0.88f, 1f);
                 catRT.localScale = new Vector3(1.18f, 0.88f, 1f);
                 EmitSparks(new Vector2(-235, -180), 8, new Color(1f, 0.88f, 0.60f, 1f));
                 overScrubDamage = Mathf.Max(0f, overScrubDamage - 3f);
@@ -1876,17 +2506,72 @@ public class LuaBootstrapper : MonoBehaviour
         playerBubbleText = CreateText(bubbleGO.transform, "BubbleTxt", "Иду к окну заказов", 12, new Color(0.98f, 0.92f, 0.76f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-10, -4), TextAnchor.MiddleCenter, true);
 
         GameObject topBar = CreatePanel(rootBG.transform, "TopBar", new Color(0.16f, 0.12f, 0.09f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -28), new Vector2(0, 56), null, false, true);
-        topTitleText = CreateText(topBar.transform, "Title", "Мастерская «Реставратор»", 17, new Color(0.98f, 0.88f, 0.64f, 1f), new Vector2(0, 0), new Vector2(0.52f, 1), new Vector2(22, 0), new Vector2(-20, 0), TextAnchor.MiddleLeft, true);
-        topStatsText = CreateText(topBar.transform, "Stats", "", 15, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.52f, 0), new Vector2(1, 1), new Vector2(-68, 0), new Vector2(-74, 0), TextAnchor.MiddleRight, true);
+        topTitleText = CreateText(topBar.transform, "Title", "Мастерская «Реставратор»", 16, new Color(0.98f, 0.88f, 0.64f, 1f), new Vector2(0, 0), new Vector2(0.36f, 1), new Vector2(22, 0), new Vector2(-20, 0), TextAnchor.MiddleLeft, true);
+        TooltipTrigger.Attach(topTitleText.gameObject, "TOP_TITLE");
 
-        Button muteBtn = CreateButton(topBar.transform, "MuteBtn", "🔊", Vector2.zero, new Vector2(40, 36), new Color(0.24f, 0.18f, 0.14f, 1f), () => {
+        GameObject clockRoot = CreatePanel(topBar.transform, "ClockWidgetRoot", new Color(0.12f, 0.09f, 0.07f, 0.95f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-40f, 0f), new Vector2(210f, 48f), spBeveledPanel, true, true);
+        clockWidgetRT = clockRoot.GetComponent<RectTransform>();
+        TooltipTrigger.Attach(clockRoot, "CLOCK_WIDGET");
+
+        Button clockBtn = clockRoot.AddComponent<Button>();
+        clockBtn.transition = Selectable.Transition.ColorTint;
+        clockBtn.onClick.AddListener(() => {
+            PlaySFX(clipCrystalChime, 0.65f, 1.4f);
+            clockWidgetRT.localScale = new Vector3(1.06f, 1.06f, 1f);
+            float shiftSec = TimeController.Instance != null ? TimeController.Instance.ShiftTimeSeconds : completedOrdersCount * 180f;
+            int m = Mathf.FloorToInt(shiftSec / 60f);
+            int s = Mathf.FloorToInt(shiftSec % 60f);
+            string phase = TimeController.Instance != null ? TimeController.Instance.CurrentPhase : "Утро";
+            int pct = Mathf.RoundToInt(TimeController.Instance != null ? TimeController.Instance.PhaseProgress * 100f : 0f);
+            bottomHintText.text = $"Хронометр Буре: Фаза «{phase}» ({pct}%) • Смена: {m:D2}:{s:D2} / 12:00";
+        });
+
+        GameObject dialGO = CreatePanel(clockRoot.transform, "ClockDial", Color.white, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(24f, 0f), new Vector2(40f, 40f), spClockDial);
+        dialGO.GetComponent<Image>().raycastTarget = false;
+
+        GameObject hourGO = CreatePanel(dialGO.transform, "HourHand", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(8f, 20f), spHourHand);
+        hourGO.GetComponent<Image>().raycastTarget = false;
+        hourHandRT = hourGO.GetComponent<RectTransform>();
+        hourHandRT.pivot = new Vector2(0.5f, 0.12f);
+
+        GameObject minGO = CreatePanel(dialGO.transform, "MinuteHand", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(6f, 26f), spMinuteHand);
+        minGO.GetComponent<Image>().raycastTarget = false;
+        minuteHandRT = minGO.GetComponent<RectTransform>();
+        minuteHandRT.pivot = new Vector2(0.5f, 0.12f);
+
+        GameObject pivotCap = CreatePanel(dialGO.transform, "PivotCap", new Color(0.96f, 0.82f, 0.32f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(5f, 5f), spSoftLightGlow);
+        pivotCap.GetComponent<Image>().raycastTarget = false;
+
+        clockPhaseText = CreateText(clockRoot.transform, "PhaseTitle", "УТРО", 13, new Color(1f, 0.90f, 0.62f, 1f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(42f, 9f), new Vector2(-50f, 18f), TextAnchor.MiddleLeft, true);
+        clockDigitalText = CreateText(clockRoot.transform, "DigitalClock", "00:00 / 12:00", 10, new Color(0.85f, 0.82f, 0.75f, 0.85f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(42f, -8f), new Vector2(-50f, 16f), TextAnchor.MiddleLeft);
+
+        for (int i = 0; i < 4; i++)
+        {
+            float gx = 138f + i * 14f;
+            GameObject gemGO = CreatePanel(clockRoot.transform, "PhaseGem_" + i, Color.gray, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(gx, 7f), new Vector2(10f, 10f), spWaxSealBadge);
+            gemGO.GetComponent<Image>().raycastTarget = false;
+            clockPhaseGemImgs[i] = gemGO.GetComponent<Image>();
+        }
+
+        GameObject barBG = CreatePanel(clockRoot.transform, "PhaseBarBG", new Color(0.08f, 0.06f, 0.05f, 0.9f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(160f, -8f), new Vector2(56f, 6f), spBeveledButton);
+        barBG.GetComponent<Image>().raycastTarget = false;
+        GameObject barFill = CreatePanel(barBG.transform, "Fill", new Color(0.88f, 0.72f, 0.28f, 1f), new Vector2(0f, 0f), new Vector2(0f, 1f), Vector2.zero, new Vector2(0f, 0f));
+        barFill.GetComponent<Image>().raycastTarget = false;
+        clockPhaseFillRT = barFill.GetComponent<RectTransform>();
+        clockPhaseFillRT.pivot = new Vector2(0f, 0.5f);
+
+        topStatsText = CreateText(topBar.transform, "Stats", "", 14, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.58f, 0), new Vector2(1, 1), new Vector2(-104, 0), new Vector2(-110, 0), TextAnchor.MiddleRight, true);
+        TooltipTrigger.Attach(topStatsText.gameObject, "TOP_STATS_ORDERS");
+
+        Button muteBtn = CreateButton(topBar.transform, "MuteBtn", "🔊 ЗВУК", Vector2.zero, new Vector2(88, 34), new Color(0.24f, 0.18f, 0.14f, 1f), () => {
             ToggleMute();
-        }, out muteBtnText, out _);
+        }, out muteBtnText, out muteBtnImg);
         RectTransform mbrt = muteBtn.GetComponent<RectTransform>();
         mbrt.anchorMin = new Vector2(1, 0.5f);
         mbrt.anchorMax = new Vector2(1, 0.5f);
-        mbrt.anchoredPosition = new Vector2(-32, 0);
-        muteBtnText.fontSize = 18;
+        mbrt.anchoredPosition = new Vector2(-54, 0);
+        muteBtnText.fontSize = 13;
+        TooltipTrigger.Attach(muteBtn.gameObject, "TOP_MUTE_BTN");
 
         GameObject bottomBar = CreatePanel(rootBG.transform, "BottomBar", new Color(0.16f, 0.12f, 0.09f, 1f), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 24), new Vector2(0, 48));
         bottomHintText = CreateText(bottomBar.transform, "BottomHint", "", 15, new Color(0.98f, 0.92f, 0.74f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-30, 0), TextAnchor.MiddleCenter, true);
@@ -1929,11 +2614,15 @@ public class LuaBootstrapper : MonoBehaviour
             CreateButton(card.transform, "TakeBtn", "Принять заказ", new Vector2(0, -140), new Vector2(280, 44), new Color(0.26f, 0.52f, 0.32f, 1f), () => {
                 SelectOrderFromWindow(idx);
             }, out cardBtnLabels[i], out cardBtnImgs[i]);
+            TooltipTrigger.Attach(card, "WINDOW_ORDER_" + i);
         }
 
-        CreateButton(windowOverlay.transform, "CloseWinBtn", "← Отойти от окна", new Vector2(0, -228), new Vector2(340, 42), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
+        Button closeWinBtn = CreateButton(windowOverlay.transform, "CloseWinBtn", "← Отойти от окна", new Vector2(0, -228), new Vector2(340, 42), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
             SetViewState("ROOM");
         }, out _, out _);
+        TooltipTrigger.Attach(closeWinBtn.gameObject, "WINDOW_CLOSE_BTN");
+
+        AddCornerCloseButton(windowOverlay.transform, () => SetViewState("ROOM"));
 
         windowOverlay.SetActive(false);
     }
@@ -1944,6 +2633,7 @@ public class LuaBootstrapper : MonoBehaviour
         CreateText(cabinetOverlay.transform, "Header", "ШКАФ ИНСТРУМЕНТОВ И РЕАКТИВОВ", 20, new Color(0.98f, 0.88f, 0.60f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -32), new Vector2(-40, 36), TextAnchor.MiddleCenter, true);
 
         GameObject memoBox = CreatePanel(cabinetOverlay.transform, "DiagMemo", new Color(0.18f, 0.14f, 0.11f, 1f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(215, 14), new Vector2(366, 376), spBeveledPanel, true, true);
+        TooltipTrigger.Attach(memoBox, "CAB_DIAG_MEMO");
         cabinetDiagReminderText = CreateText(memoBox.transform, "MemoTxt", "", 14, new Color(0.94f, 0.90f, 0.82f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-28, -28), TextAnchor.UpperLeft);
 
         string[] tIds = { "RING_GRINDER", "DIAMOND_FILE", "MICRO_SPATULA" };
@@ -1957,11 +2647,12 @@ public class LuaBootstrapper : MonoBehaviour
         {
             string id = tIds[i];
             int idx = i;
-            CreateButton(cabinetOverlay.transform, "Tool_" + id, tNames[i], new Vector2(185, 148 - i * 40), new Vector2(620, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
+            Button tBtn = CreateButton(cabinetOverlay.transform, "Tool_" + id, tNames[i], new Vector2(185, 148 - i * 40), new Vector2(620, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
                 selectedMechTool = id;
                 HighlightList(toolBtnImgs, idx, new Color(0.25f, 0.52f, 0.34f, 1f));
             }, out _, out Image bImg);
             toolBtnImgs.Add(bImg);
+            TooltipTrigger.Attach(tBtn.gameObject, "CAB_TOOL_" + (id == "RING_GRINDER" ? "GRINDER" : (id == "DIAMOND_FILE" ? "DIAMOND" : "SPATULA")));
         }
 
         string[] sIds = { "SPIRIT", "ACID_GEL", "ACETONE" };
@@ -1975,11 +2666,12 @@ public class LuaBootstrapper : MonoBehaviour
         {
             string id = sIds[i];
             int idx = i;
-            CreateButton(cabinetOverlay.transform, "Sol_" + id, sNames[i], new Vector2(185, -18 - i * 40), new Vector2(620, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
+            Button sBtn = CreateButton(cabinetOverlay.transform, "Sol_" + id, sNames[i], new Vector2(185, -18 - i * 40), new Vector2(620, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
                 selectedSolvent = id;
                 HighlightList(solventBtnImgs, idx, new Color(0.25f, 0.52f, 0.34f, 1f));
             }, out _, out Image bImg);
             solventBtnImgs.Add(bImg);
+            TooltipTrigger.Attach(sBtn.gameObject, "CAB_SOL_" + (id == "SPIRIT" ? "SPIRIT" : (id == "ACID_GEL" ? "ACID" : "ACETONE")));
         }
 
         string[] stIds = { "PATINA", "NEW" };
@@ -1989,20 +2681,25 @@ public class LuaBootstrapper : MonoBehaviour
         {
             string id = stIds[i];
             int idx = i;
-            CreateButton(cabinetOverlay.transform, "Style_" + id, stNames[i], new Vector2(32 + i * 315, -178), new Vector2(302, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
+            Button stBtn = CreateButton(cabinetOverlay.transform, "Style_" + id, stNames[i], new Vector2(32 + i * 315, -178), new Vector2(302, 36), new Color(0.28f, 0.23f, 0.19f, 1f), () => {
                 selectedStyle = id;
                 HighlightList(styleBtnImgs, idx, new Color(0.52f, 0.40f, 0.18f, 1f));
             }, out _, out Image bImg);
             styleBtnImgs.Add(bImg);
+            TooltipTrigger.Attach(stBtn.gameObject, "CAB_STYLE_" + id);
         }
 
-        CreateButton(cabinetOverlay.transform, "ConfirmCabBtn", "Взять набор и перейти к Рабочему столу ->", new Vector2(210, -232), new Vector2(440, 44), new Color(0.58f, 0.38f, 0.16f, 1f), () => {
+        Button confirmCabBtn = CreateButton(cabinetOverlay.transform, "ConfirmCabBtn", "Взять набор и перейти к Рабочему столу ->", new Vector2(210, -232), new Vector2(440, 44), new Color(0.58f, 0.38f, 0.16f, 1f), () => {
             ConfirmCabinetSelection();
         }, out _, out _);
+        TooltipTrigger.Attach(confirmCabBtn.gameObject, "CAB_CONFIRM_BTN");
 
-        CreateButton(cabinetOverlay.transform, "CloseCabBtn", "← Отойти в комнату", new Vector2(-280, -232), new Vector2(260, 44), new Color(0.40f, 0.25f, 0.20f, 1f), () => {
+        Button closeCabBtn = CreateButton(cabinetOverlay.transform, "CloseCabBtn", "← Отойти в комнату", new Vector2(-280, -232), new Vector2(260, 44), new Color(0.40f, 0.25f, 0.20f, 1f), () => {
             SetViewState("ROOM");
         }, out _, out _);
+        TooltipTrigger.Attach(closeCabBtn.gameObject, "CAB_CLOSE_BTN");
+
+        AddCornerCloseButton(cabinetOverlay.transform, () => SetViewState("ROOM"));
 
         cabinetOverlay.SetActive(false);
     }
@@ -2012,13 +2709,15 @@ public class LuaBootstrapper : MonoBehaviour
         upgradesOverlay = CreatePanel(parent, "UpgradesOverlay", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 4), new Vector2(1060, 520), spBeveledPanel, true, true);
         CreateText(upgradesOverlay.transform, "Header", "СТЕНД МАСТЕРА — ОБОРУДОВАНИЕ И МУЗЕЙНАЯ ВИТРИНА", 20, new Color(0.98f, 0.88f, 0.60f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -26), new Vector2(-40, 36), TextAnchor.MiddleCenter, true);
 
-        CreateButton(upgradesOverlay.transform, "TabEquipBtn", "✦ ОБОРУДОВАНИЕ И СЕРТИФИКАТЫ", new Vector2(-220, 202), new Vector2(340, 34), new Color(0.38f, 0.52f, 0.36f, 1f), () => {
+        Button tabEquipBtn = CreateButton(upgradesOverlay.transform, "TabEquipBtn", "✦ ОБОРУДОВАНИЕ И СЕРТИФИКАТЫ", new Vector2(-220, 202), new Vector2(340, 34), new Color(0.38f, 0.52f, 0.36f, 1f), () => {
             SelectMasterStandTab(0);
         }, out _, out upgTabBtnEquipImg);
+        TooltipTrigger.Attach(tabEquipBtn.gameObject, "UPG_TAB_EQUIP");
 
-        CreateButton(upgradesOverlay.transform, "TabGalleryBtn", "🏛 МУЗЕЙНАЯ ГАЛЕРЕЯ ШЕДЕВРОВ", new Vector2(220, 202), new Vector2(340, 34), new Color(0.24f, 0.20f, 0.18f, 1f), () => {
+        Button tabGalleryBtn = CreateButton(upgradesOverlay.transform, "TabGalleryBtn", "🏛 МУЗЕЙНАЯ ГАЛЕРЕЯ ШЕДЕВРОВ", new Vector2(220, 202), new Vector2(340, 34), new Color(0.24f, 0.20f, 0.18f, 1f), () => {
             SelectMasterStandTab(1);
         }, out _, out upgTabBtnGalleryImg);
+        TooltipTrigger.Attach(tabGalleryBtn.gameObject, "UPG_TAB_GALLERY");
 
         upgEquipContainer = CreatePanel(upgradesOverlay.transform, "EquipTabContainer", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -10), new Vector2(1000, 400));
         upgStatusText = CreateText(upgEquipContainer.transform, "StatusTxt", "", 15, new Color(0.84f, 0.96f, 0.84f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -18), new Vector2(-60, 30), TextAnchor.MiddleCenter, true);
@@ -2043,9 +2742,10 @@ public class LuaBootstrapper : MonoBehaviour
 
             CreateText(row.transform, "Desc", titles[i], 14, new Color(0.95f, 0.92f, 0.86f, 1f), new Vector2(0, 0), new Vector2(0.70f, 1), new Vector2(76, 0), new Vector2(-76, -8), TextAnchor.MiddleLeft, true);
 
-            CreateButton(row.transform, "BuyBtn_" + i, "Купить", new Vector2(330, 0), new Vector2(240, 44), new Color(0.28f, 0.52f, 0.32f, 1f), () => {
+            Button buyBtn = CreateButton(row.transform, "BuyBtn_" + i, "Купить", new Vector2(330, 0), new Vector2(240, 44), new Color(0.28f, 0.52f, 0.32f, 1f), () => {
                 BuyUpgrade(idx);
             }, out upgBtnLabels[i], out upgBtnImgs[i]);
+            TooltipTrigger.Attach(buyBtn.gameObject, "UPG_BUY_" + i);
         }
 
         upgGalleryContainer = CreatePanel(upgradesOverlay.transform, "GalleryTabContainer", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -10), new Vector2(1000, 400));
@@ -2064,16 +2764,20 @@ public class LuaBootstrapper : MonoBehaviour
             galleryCardBadges[i] = CreateText(card.transform, "Badge", "", 12, new Color(0.78f, 0.92f, 0.80f, 1f), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, -48), new Vector2(-16, 24), TextAnchor.MiddleCenter, true);
             galleryCardLores[i] = CreateText(card.transform, "Lore", "", 11, new Color(0.90f, 0.88f, 0.84f, 1f), new Vector2(0, 0), new Vector2(1, 0.5f), new Vector2(0, 14), new Vector2(-20, -56), TextAnchor.UpperCenter);
 
-            CreateButton(card.transform, "InspectBtn", "Осмотреть", new Vector2(0, -114), new Vector2(188, 30), new Color(0.32f, 0.44f, 0.36f, 1f), () => {
+            Button inspBtn = CreateButton(card.transform, "InspectBtn", "Осмотреть", new Vector2(0, -114), new Vector2(188, 30), new Color(0.32f, 0.44f, 0.36f, 1f), () => {
                 InspectGalleryRelic(idx);
             }, out _, out _);
+            TooltipTrigger.Attach(inspBtn.gameObject, "UPG_INSPECT_RELIC");
         }
 
         upgGalleryContainer.SetActive(false);
 
-        CreateButton(upgradesOverlay.transform, "CloseUpgBtn", "← Вернуться в мастерскую", new Vector2(0, -222), new Vector2(340, 38), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
+        Button closeUpgBtn = CreateButton(upgradesOverlay.transform, "CloseUpgBtn", "← Вернуться в мастерскую", new Vector2(0, -222), new Vector2(340, 38), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
             SetViewState("ROOM");
         }, out _, out _);
+        TooltipTrigger.Attach(closeUpgBtn.gameObject, "UPG_CLOSE_BTN");
+
+        AddCornerCloseButton(upgradesOverlay.transform, () => SetViewState("ROOM"));
 
         upgradesOverlay.SetActive(false);
     }
@@ -2204,10 +2908,26 @@ public class LuaBootstrapper : MonoBehaviour
         benchProgressText = CreateText(leftLog.transform, "ProgTxt", "", 14, new Color(0.76f, 0.96f, 0.80f, 1f), new Vector2(0, 0), new Vector2(1, 0.30f), new Vector2(0, 14), new Vector2(-26, -12), TextAnchor.LowerLeft, true);
 
         GameObject centerMat = CreatePanel(workbenchOverlay.transform, "CenterMat", new Color(0.15f, 0.34f, 0.22f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 24), new Vector2(394, 394), spBeveledPanel, true, true);
-        CreateButton(centerMat.transform, "BenchZoomBtn", "🔍 100%", new Vector2(140, 172), new Vector2(88, 30), new Color(0.24f, 0.38f, 0.32f, 1f), () => {
+        Button zoomOutBtn = CreateButton(centerMat.transform, "ZoomOutBtn", "−", new Vector2(72, 172), new Vector2(28, 28), new Color(0.24f, 0.36f, 0.30f, 1f), () => {
+            StepBenchZoom(-0.25f);
+        }, out Text zoTxt, out _);
+        zoTxt.fontSize = 16;
+        TooltipTrigger.Attach(zoomOutBtn.gameObject, "BENCH_ZOOM_OUT");
+
+        Button benchZoomBtn = CreateButton(centerMat.transform, "BenchZoomBtn", "🔍 100%", new Vector2(128, 172), new Vector2(76, 28), new Color(0.24f, 0.38f, 0.32f, 1f), () => {
             CycleBenchZoom();
         }, out benchZoomBtnText, out _);
+        benchZoomBtnText.fontSize = 13;
+        TooltipTrigger.Attach(benchZoomBtn.gameObject, "BENCH_ZOOM_BTN");
+
+        Button zoomInBtn = CreateButton(centerMat.transform, "ZoomInBtn", "+", new Vector2(178, 172), new Vector2(28, 28), new Color(0.24f, 0.36f, 0.30f, 1f), () => {
+            StepBenchZoom(0.25f);
+        }, out Text ziTxt, out _);
+        ziTxt.fontSize = 16;
+        TooltipTrigger.Attach(zoomInBtn.gameObject, "BENCH_ZOOM_IN");
+
         GameObject surfGO = CreatePanel(centerMat.transform, "ItemSurface", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360, 360));
+        TooltipTrigger.Attach(surfGO, "BENCH_ITEM_SURFACE");
         itemSurfaceRT = surfGO.GetComponent<RectTransform>();
         itemSurfaceImg = surfGO.GetComponent<Image>();
 
@@ -2232,6 +2952,7 @@ public class LuaBootstrapper : MonoBehaviour
         toolCursorGO.SetActive(false);
 
         GameObject speedBar = CreatePanel(centerMat.transform, "SpeedBar", new Color(0.10f, 0.10f, 0.10f, 0.95f), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -26), new Vector2(360, 24), spBeveledButton, true);
+        TooltipTrigger.Attach(speedBar, "BENCH_SPEED_BAR");
         GameObject speedFill = CreatePanel(speedBar.transform, "Fill", new Color(0.28f, 0.82f, 0.42f, 1f), new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, Vector2.zero);
         speedFillRT = speedFill.GetComponent<RectTransform>();
         speedFillRT.pivot = new Vector2(0, 0.5f);
@@ -2245,15 +2966,23 @@ public class LuaBootstrapper : MonoBehaviour
             SetViewState("ROOM");
             MovePlayerToStation(posCabinetInteract, "CABINET");
         }, out _, out _);
+        TooltipTrigger.Attach(btnGoToCabinetFromBench.gameObject, "BENCH_GO_CAB_BTN");
 
         benchToolsPanel = CreatePanel(rightCol.transform, "BenchToolsSub", Color.clear, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -32), new Vector2(320, 310));
 
-        CreateButton(benchToolsPanel.transform, "ActClean", "1. Растворитель: Плавная очистка", new Vector2(0, 108), new Vector2(308, 42), new Color(0.24f, 0.40f, 0.50f, 1f), () => SelectBenchTool("CLEAN"), out _, out benchToolBtnImgs[0]);
-        CreateButton(benchToolsPanel.transform, "ActGrind", "2. Шлифовка: Быстро дергать мышью!", new Vector2(0, 58), new Vector2(308, 42), new Color(0.50f, 0.34f, 0.20f, 1f), () => SelectBenchTool("GRIND"), out _, out benchToolBtnImgs[1]);
-        CreateButton(benchToolsPanel.transform, "ActClick", "3. Закрепка: Быстро кликать (не медлить!)", new Vector2(0, 8), new Vector2(308, 42), new Color(0.46f, 0.28f, 0.44f, 1f), () => SelectBenchTool("CLICK_FIX"), out _, out benchToolBtnImgs[2]);
-        CreateButton(benchToolsPanel.transform, "ActFinish", "4. Полировка: Круговое наведение лоска", new Vector2(0, -42), new Vector2(308, 42), new Color(0.26f, 0.46f, 0.30f, 1f), () => SelectBenchTool("FINISH"), out _, out benchToolBtnImgs[3]);
+        Button actCleanBtn = CreateButton(benchToolsPanel.transform, "ActClean", "🧪 1. Растворитель: Очистка", new Vector2(0, 108), new Vector2(308, 42), new Color(0.24f, 0.40f, 0.50f, 1f), () => SelectBenchTool("CLEAN"), out benchToolBtnTexts[0], out benchToolBtnImgs[0]);
+        TooltipTrigger.Attach(actCleanBtn.gameObject, "BENCH_ACT_CLEAN");
 
-        CreateButton(benchToolsPanel.transform, "ActDoneWalkWindow", "Завершить и отнести в Окно заказов ->", new Vector2(0, -108), new Vector2(308, 48), new Color(0.62f, 0.40f, 0.16f, 1f), () => {
+        Button actGrindBtn = CreateButton(benchToolsPanel.transform, "ActGrind", "🪚 2. Напильник: Шлифовка", new Vector2(0, 58), new Vector2(308, 42), new Color(0.50f, 0.34f, 0.20f, 1f), () => SelectBenchTool("GRIND"), out benchToolBtnTexts[1], out benchToolBtnImgs[1]);
+        TooltipTrigger.Attach(actGrindBtn.gameObject, "BENCH_ACT_GRIND");
+
+        Button actClickBtn = CreateButton(benchToolsPanel.transform, "ActClick", "🗜️ 3. Зажимы: Закрепка", new Vector2(0, 8), new Vector2(308, 42), new Color(0.46f, 0.28f, 0.44f, 1f), () => SelectBenchTool("CLICK_FIX"), out benchToolBtnTexts[2], out benchToolBtnImgs[2]);
+        TooltipTrigger.Attach(actClickBtn.gameObject, "BENCH_ACT_CLICK");
+
+        Button actFinishBtn = CreateButton(benchToolsPanel.transform, "ActFinish", "✨ 4. Лоск: Полировка", new Vector2(0, -42), new Vector2(308, 42), new Color(0.26f, 0.46f, 0.30f, 1f), () => SelectBenchTool("FINISH"), out benchToolBtnTexts[3], out benchToolBtnImgs[3]);
+        TooltipTrigger.Attach(actFinishBtn.gameObject, "BENCH_ACT_FINISH");
+
+        Button actDoneBtn = CreateButton(benchToolsPanel.transform, "ActDoneWalkWindow", "Завершить и отнести в Окно заказов ->", new Vector2(0, -108), new Vector2(308, 48), new Color(0.62f, 0.40f, 0.16f, 1f), () => {
             if (cleanProgress >= 75 && grindProgress >= 75 && clickFixProgress >= 100 && finishProgress >= 80f)
             {
                 orderStage = "READY_TO_SUBMIT";
@@ -2266,10 +2995,14 @@ public class LuaBootstrapper : MonoBehaviour
                 bottomHintText.text = "Завершите все 4 этапа: Очистку (75%+), Шлифовку (75%+), Закрепку кликами (100%) и Полировку (80%+)!";
             }
         }, out btnDoneText, out btnDoneImg);
+        TooltipTrigger.Attach(actDoneBtn.gameObject, "BENCH_DONE_BTN");
 
-        CreateButton(workbenchOverlay.transform, "BackRoomBtn", "← Отойти от стола в мастерскую", new Vector2(0, -240), new Vector2(350, 40), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
+        Button backRoomBtn = CreateButton(workbenchOverlay.transform, "BackRoomBtn", "← Отойти от стола в мастерскую", new Vector2(0, -240), new Vector2(350, 40), new Color(0.42f, 0.26f, 0.20f, 1f), () => {
             SetViewState("ROOM");
         }, out _, out _);
+        TooltipTrigger.Attach(backRoomBtn.gameObject, "BENCH_BACK_ROOM_BTN");
+
+        AddCornerCloseButton(workbenchOverlay.transform, () => SetViewState("ROOM"));
 
         for (int i = 0; i < 12; i++)
         {
@@ -2291,16 +3024,29 @@ public class LuaBootstrapper : MonoBehaviour
         workbenchOverlay.SetActive(false);
     }
 
+    public void StepBenchZoom(float delta)
+    {
+        targetBenchZoom = Mathf.Clamp(targetBenchZoom + delta, 1.0f, 2.0f);
+        float pitch = 1.0f + (targetBenchZoom - 1.0f) * 0.5f;
+        PlaySFX(clipToolSwitch, 0.45f, pitch);
+    }
+
     private void CycleBenchZoom()
     {
         if (targetBenchZoom < 1.35f) targetBenchZoom = 1.5f;
         else if (targetBenchZoom < 1.75f) targetBenchZoom = 2.0f;
         else targetBenchZoom = 1.0f;
-        PlaySFX(clipToolSwitch, 0.45f, 1.25f);
+        float pitch = 1.0f + (targetBenchZoom - 1.0f) * 0.5f;
+        PlaySFX(clipToolSwitch, 0.45f, pitch);
     }
 
-    private void SelectBenchTool(string toolId)
+    public void SelectBenchTool(string toolId)
     {
+        if (toolLoopSource != null && toolLoopSource.isPlaying)
+        {
+            toolLoopSource.Stop();
+        }
+
         activeBenchAction = toolId;
         clickNodesContainer.SetActive(toolId == "CLICK_FIX");
 
@@ -2313,7 +3059,7 @@ public class LuaBootstrapper : MonoBehaviour
         int activeIdx = toolId == "CLEAN" ? 0 : (toolId == "GRIND" ? 1 : (toolId == "CLICK_FIX" ? 2 : 3));
         for (int i = 0; i < 4; i++)
         {
-            benchToolBtnImgs[i].color = (i == activeIdx) ? new Color(0.72f, 0.56f, 0.22f, 1f) : defCols[i];
+            benchToolBtnImgs[i].color = (i == activeIdx) ? new Color(0.85f, 0.65f, 0.22f, 1f) : defCols[i];
             benchToolBtnImgs[i].transform.localScale = (i == activeIdx) ? new Vector3(1.04f, 1.04f, 1f) : Vector3.one;
         }
 
@@ -2339,6 +3085,32 @@ public class LuaBootstrapper : MonoBehaviour
             speedBarLabelText.text = "Режим полировки: Плавными кругами наведите зеркальный PBR-блеск";
             bottomHintText.text = "Зажмите ЛКМ и плавно водите по предмету до 100% сияния.";
         }
+        UpdateBenchToolVisuals();
+    }
+
+    private void UpdateBenchToolVisuals()
+    {
+        string[] baseLabels = {
+            "🧪 1. Растворитель: Очистка",
+            "🪚 2. Напильник: Шлифовка",
+            "🗜️ 3. Зажимы: Закрепка",
+            "✨ 4. Лоск: Полировка"
+        };
+        bool[] finished = {
+            cleanProgress >= 75f,
+            grindProgress >= 75f,
+            clickFixProgress >= 100f,
+            finishProgress >= 80f
+        };
+        for (int i = 0; i < 4; i++)
+        {
+            if (benchToolBtnTexts[i] != null)
+            {
+                string mark = finished[i] ? "✓ " : "";
+                string activeMarker = (activeBenchAction == (i == 0 ? "CLEAN" : (i == 1 ? "GRIND" : (i == 2 ? "CLICK_FIX" : "FINISH")))) ? "▶ " : "";
+                benchToolBtnTexts[i].text = mark + activeMarker + baseLabels[i];
+            }
+        }
     }
 
     private void UpdateBenchDoneButtonVisuals()
@@ -2347,6 +3119,7 @@ public class LuaBootstrapper : MonoBehaviour
         bool allDone = (cleanProgress >= 75 && grindProgress >= 75 && clickFixProgress >= 100 && finishProgress >= 80f);
         btnDoneImg.color = allDone ? new Color(0.24f, 0.65f, 0.32f, 1f) : new Color(0.38f, 0.28f, 0.22f, 1f);
         btnDoneText.text = allDone ? "✓ ГОТОВО! Отнести в Окно заказов →" : "Завершить и отнести в Окно заказов ->";
+        UpdateBenchToolVisuals();
     }
 
     private void BuildModalOverlay(Transform parent)
@@ -2356,11 +3129,40 @@ public class LuaBootstrapper : MonoBehaviour
         modalBody = CreateText(modalOverlay.transform, "Body", "", 16, new Color(0.94f, 0.92f, 0.86f, 1f), new Vector2(0, 0.26f), new Vector2(1, 0.82f), Vector2.zero, new Vector2(-64, 0), TextAnchor.MiddleLeft);
 
         modalBtn1 = CreateButton(modalOverlay.transform, "Btn1", "Продолжить", new Vector2(0, -124), new Vector2(550, 44), new Color(0.28f, 0.50f, 0.32f, 1f), () => OnModalButtonClick(1), out modalBtn1Text, out _);
+        TooltipTrigger.Attach(modalBtn1.gameObject, "MODAL_BTN_1");
+
         modalBtn2 = CreateButton(modalOverlay.transform, "Btn2", "Вариант 2", new Vector2(0, -176), new Vector2(550, 44), new Color(0.48f, 0.28f, 0.22f, 1f), () => OnModalButtonClick(2), out modalBtn2Text, out _);
+        TooltipTrigger.Attach(modalBtn2.gameObject, "MODAL_BTN_2");
 
         modalSealGO = CreatePanel(modalOverlay.transform, "ModalSeal", Color.white, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-65f, -60f), new Vector2(74f, 74f), spWaxSealBadge, false, true);
         modalSealGO.GetComponent<Image>().raycastTarget = false;
+        TooltipTrigger.Attach(modalSealGO, "MODAL_SEAL");
         modalSealText = CreateText(modalSealGO.transform, "SealTxt", "", 12, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
+
+        AddCornerCloseButton(modalOverlay.transform, () => {
+            if (viewState == "CERTIFICATE")
+            {
+                SetViewState("UPGRADES");
+                SelectMasterStandTab(1);
+            }
+            else if (viewState == "RESULT")
+            {
+                OnModalButtonClick(1);
+            }
+            else if (viewState == "TWIST")
+            {
+                OnModalButtonClick(2);
+            }
+            else if (viewState == "FINALE")
+            {
+                OnModalButtonClick(1);
+            }
+            else
+            {
+                modalOverlay.SetActive(false);
+                SetViewState("ROOM");
+            }
+        });
 
         modalOverlay.SetActive(false);
     }
@@ -2959,6 +3761,11 @@ public class LuaBootstrapper : MonoBehaviour
         benchBadgeImg.gameObject.SetActive(orderStage == "NEED_DIAGNOSIS" || orderStage == "READY_TO_RESTORE");
         cabinetBadgeImg.gameObject.SetActive(orderStage == "NEED_TOOLS");
 
+        if (TimeController.Instance != null)
+        {
+            TimeController.Instance.SyncWithOrderCount(completedOrdersCount);
+        }
+
         if (winGlowImg != null && benchGlowImg != null)
         {
             if (completedOrdersCount == 0)
@@ -2981,6 +3788,14 @@ public class LuaBootstrapper : MonoBehaviour
                 winGlowImg.color = new Color(0.24f, 0.35f, 0.65f, 0.38f);
                 benchGlowImg.color = new Color(1f, 0.75f, 0.32f, 0.48f);
             }
+        }
+
+        if (ambientTintImg != null)
+        {
+            if (completedOrdersCount == 0) ambientTintImg.color = new Color(0.72f, 0.84f, 1.0f, 0.06f);
+            else if (completedOrdersCount == 1) ambientTintImg.color = new Color(1.0f, 0.98f, 0.92f, 0.03f);
+            else if (completedOrdersCount == 2) ambientTintImg.color = new Color(1.0f, 0.55f, 0.22f, 0.14f);
+            else ambientTintImg.color = new Color(0.12f, 0.18f, 0.40f, 0.26f);
         }
 
         if (orderStage == "NONE")
@@ -3014,7 +3829,7 @@ public class LuaBootstrapper : MonoBehaviour
     {
         string rankStr = qualificationRank == 1 ? "I разряд" : (qualificationRank == 2 ? "II разряд" : "III разряд (Гранд)");
         string ordName = (activeOrder != null) ? activeOrder.title : "Свободен";
-        string timeOfDay = completedOrdersCount == 0 ? "Утро" : (completedOrdersCount == 1 ? "День" : (completedOrdersCount == 2 ? "Закат" : "Вечер"));
+        string timeOfDay = (TimeController.Instance != null) ? TimeController.Instance.CurrentPhase : (completedOrdersCount == 0 ? "Утро" : (completedOrdersCount == 1 ? "День" : (completedOrdersCount == 2 ? "Закат" : "Вечер")));
         topTitleText.text = $"Смена ({timeOfDay}) • Заказов: {completedOrdersCount}/{TOTAL_ORDERS_TO_WIN} • {rankStr} • {ordName}";
         topStatsText.text = $"Касса: {money} руб.   |   Доверие: {trust}%   |   Износ: {Mathf.FloorToInt(overScrubDamage)}%";
     }
@@ -3065,6 +3880,17 @@ public class LuaBootstrapper : MonoBehaviour
         else if (station == "UPGRADES")
         {
             OpenUpgradesView();
+        }
+        else if (station == "FIREPLACE")
+        {
+            PlaySFX(clipHearthFire, 0.85f, Random.Range(0.95f, 1.05f));
+            PlaySFX(clipBell, 0.5f, 1.25f);
+            EmitFireplaceSparks(16);
+            fireplaceStokeTimer = 2.5f;
+            overScrubDamage = Mathf.Max(0f, overScrubDamage - 2f);
+            SpawnFloatingText(new Vector2(-270f, 160f), "+15% к теплу мастерской", new Color(1f, 0.85f, 0.40f, 1f));
+            bottomHintText.text = "Вы подбросили сухое березовое полено в чугунный камин. По мастерской разнеслось благодатное тепло!";
+            UpdateTopBar();
         }
     }
 
@@ -3494,6 +4320,66 @@ public class LuaBootstrapper : MonoBehaviour
         modalBtn2.gameObject.SetActive(false);
     }
 
+    private void EmitFireplaceSparks(int count)
+    {
+        if (fireplaceSparks == null || fireplaceSparks.Count == 0) return;
+        int emitted = 0;
+        for (int i = 0; i < fireplaceSparks.Count && emitted < count; i++)
+        {
+            FireplaceSpark spk = fireplaceSparks[i];
+            if (spk.life <= 0f)
+            {
+                spk.life = Random.Range(1.2f, 2.2f);
+                spk.maxLife = spk.life;
+                spk.pos = new Vector2(Random.Range(-40f, 40f), Random.Range(-25f, -10f));
+                spk.vel = new Vector2(Random.Range(-15f, 15f), Random.Range(45f, 95f));
+                spk.wobblePhase = Random.Range(0f, Mathf.PI * 2f);
+                spk.img.color = new Color(1f, 0.90f, 0.55f, 0.85f);
+                spk.rt.anchoredPosition = spk.pos;
+                emitted++;
+            }
+        }
+    }
+
+    private void UpdateFireplaceSparks(float dt)
+    {
+        if (viewState != "ROOM")
+        {
+            for (int i = 0; i < fireplaceSparks.Count; i++)
+            {
+                fireplaceSparks[i].img.color = Color.clear;
+            }
+            return;
+        }
+
+        if (Random.value < dt * 4.5f)
+        {
+            EmitFireplaceSparks(1);
+        }
+
+        float t = Time.time;
+        for (int i = 0; i < fireplaceSparks.Count; i++)
+        {
+            FireplaceSpark spk = fireplaceSparks[i];
+            if (spk.life > 0f)
+            {
+                spk.life -= dt;
+                spk.vel.y += 35f * dt;
+                spk.pos.y += spk.vel.y * dt;
+                spk.pos.x += (spk.vel.x + Mathf.Sin(t * 6f + spk.wobblePhase) * 16f) * dt;
+                spk.rt.anchoredPosition = spk.pos;
+
+                float prog = 1f - (spk.life / spk.maxLife);
+                Color c = Color.Lerp(new Color(1f, 0.95f, 0.75f, 0.9f), new Color(0.95f, 0.35f, 0.05f, 0f), prog);
+                spk.img.color = c;
+            }
+            else
+            {
+                spk.img.color = Color.clear;
+            }
+        }
+    }
+
     private void UpdateDustMotes(float dt)
     {
         if (viewState != "ROOM")
@@ -3503,14 +4389,338 @@ public class LuaBootstrapper : MonoBehaviour
             return;
         }
         float t = Time.time;
+        Color phaseAmbient = (TimeController.Instance != null)
+            ? TimeController.Instance.GetAmbientColor(TimeController.Instance.CurrentPhase, TimeController.Instance.PhaseProgress)
+            : new Color(1f, 0.90f, 0.65f, 1f);
+
         for (int i = 0; i < dustMotes.Count; i++)
         {
             DustMote m = dustMotes[i];
+            m.basePos.x += Mathf.Cos(t * 0.12f + m.phase) * dt * 3.2f;
+            m.basePos.y += Mathf.Sin(t * 0.09f + m.phase * 1.2f) * dt * 2.2f + dt * 1.4f;
+            if (m.basePos.x < -560f) m.basePos.x = 560f;
+            else if (m.basePos.x > 560f) m.basePos.x = -560f;
+            if (m.basePos.y < -230f) m.basePos.y = 190f;
+            else if (m.basePos.y > 190f) m.basePos.y = -230f;
+
             float px = m.basePos.x + Mathf.Cos(t * 0.45f + m.phase) * m.radius;
             float py = m.basePos.y + Mathf.Sin(t * 0.35f + m.phase * 1.5f) * (m.radius * 0.65f);
             m.rt.anchoredPosition = new Vector2(px, py);
+
+            float inWin = Mathf.Clamp01(1f - Mathf.Abs(px - (-390f)) / 170f) * Mathf.Clamp01((py + 60f) / 200f);
+            float inLamp = Mathf.Clamp01(1f - Mathf.Abs(px) / 150f) * Mathf.Clamp01(1f - Mathf.Abs(py - 150f) / 100f);
+            float glint = Mathf.Max(inWin * 1.3f, inLamp * 1.15f);
+
             float pulse = (Mathf.Sin(t * 1.8f + m.phase) + 1f) * 0.5f;
-            m.img.color = new Color(1f, 0.90f, 0.65f, 0.10f + pulse * 0.25f);
+            float alpha = Mathf.Clamp(0.12f + pulse * 0.26f + glint * 0.28f, 0.08f, 0.68f);
+            Color col = Color.Lerp(new Color(1f, 0.90f, 0.65f), phaseAmbient, 0.35f);
+            m.img.color = new Color(col.r, col.g, col.b, alpha);
+        }
+    }
+
+    public void StepCatBreathing(float dt)
+    {
+        if (catRT == null) return;
+        float t = Time.time;
+        catClickScale = Vector3.Lerp(catClickScale, Vector3.one, dt * 5.5f);
+
+        if (Mathf.Abs(catRT.localScale.x - 1f) > 0.05f || Mathf.Abs(catRT.localScale.y - 1f) > 0.05f)
+        {
+            catRT.localScale = Vector3.Lerp(catRT.localScale, Vector3.one, dt * 6f);
+        }
+        else
+        {
+            float breathY = 1.0f + Mathf.Sin(t * 2.1f) * 0.038f;
+            float breathX = 1.0f + Mathf.Cos(t * 2.1f) * 0.020f;
+            catRT.localScale = new Vector3(breathX, breathY, 1f);
+        }
+
+        if (catTailRT != null)
+        {
+            float tailAngle = Mathf.Sin(t * 2.4f) * 15.0f + Mathf.Sin(t * 0.8f + 0.5f) * 4.5f;
+            catTailRT.localRotation = Quaternion.Euler(0f, 0f, tailAngle);
+        }
+
+        if (catLeftEarRT != null)
+        {
+            float cycleL = (t * 0.52f) % 4.8f;
+            float twitchL = (cycleL < 0.22f) ? Mathf.Sin(cycleL * Mathf.PI * 13.6f) * 11.5f : 0f;
+            catLeftEarRT.localRotation = Quaternion.Euler(0f, 0f, twitchL);
+        }
+
+        if (catRightEarRT != null)
+        {
+            float cycleR = ((t + 2.5f) * 0.44f) % 6.1f;
+            float twitchR = (cycleR < 0.18f) ? Mathf.Sin(cycleR * Mathf.PI * 16.5f) * -10.0f : 0f;
+            catRightEarRT.localRotation = Quaternion.Euler(0f, 0f, twitchR);
+        }
+    }
+
+    public void StepPlayerMovement(float dt)
+    {
+        float distToTarget = Vector2.Distance(playerPos, targetPos);
+        if (distToTarget > 2f)
+        {
+            float stepSpeed = Mathf.Min(moveSpeed, distToTarget * 8.5f);
+            playerPos = Vector2.MoveTowards(playerPos, targetPos, stepSpeed * dt);
+            walkAnimTimer += dt * 14f;
+            float bobY = Mathf.Abs(Mathf.Sin(walkAnimTimer)) * 5.5f;
+            playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + bobY);
+
+            float moveDeltaX = targetPos.x - playerPos.x;
+            if (Mathf.Abs(moveDeltaX) > 1.5f)
+            {
+                float sign = Mathf.Sign(moveDeltaX);
+                playerRT.localScale = new Vector3(sign, 1f, 1f);
+                if (playerBubbleText != null && playerBubbleText.transform.parent != null)
+                {
+                    playerBubbleText.transform.parent.localScale = new Vector3(sign, 1f, 1f);
+                }
+            }
+
+            stepSoundTimer -= dt;
+            if (stepSoundTimer <= 0f)
+            {
+                stepSoundTimer = 0.26f;
+                PlaySFX(clipStep, 0.45f, Random.Range(0.92f, 1.08f));
+            }
+        }
+        else
+        {
+            bool atWorkbench = (pendingStation == null && Vector2.Distance(playerPos, posBenchInteract) < 8f);
+            if (atWorkbench)
+            {
+                float workBobY = Mathf.Sin(Time.time * 1.85f) * 2.4f + Mathf.Cos(Time.time * 0.92f) * 1.1f;
+                float workTilt = Mathf.Sin(Time.time * 1.85f) * 1.8f;
+                float chestScale = 1.0f + Mathf.Sin(Time.time * 1.85f) * 0.026f;
+                float chestWidth = 1.0f + Mathf.Cos(Time.time * 1.85f) * 0.014f;
+                playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + workBobY);
+                playerRT.localRotation = Quaternion.Euler(0f, 0f, workTilt);
+                playerRT.localScale = new Vector3(Mathf.Sign(playerRT.localScale.x) * chestWidth, chestScale, 1f);
+            }
+            else
+            {
+                float idleBreathing = Mathf.Sin(Time.time * 2.4f) * 1.6f;
+                playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + idleBreathing);
+                playerRT.localRotation = Quaternion.identity;
+                playerRT.localScale = new Vector3(Mathf.Sign(playerRT.localScale.x), 1f, 1f);
+            }
+
+            if (!string.IsNullOrEmpty(pendingStation))
+            {
+                string st = pendingStation;
+                pendingStation = null;
+                OnPlayerArrivedAtStation(st);
+            }
+        }
+    }
+
+    public void InspectWithLoupe(Vector2 localPt)
+    {
+        if (activeOrder == null || activeOrder.diagnostics == null) return;
+        if (toolCursorGO != null && toolCursorGO.activeSelf) toolCursorGO.SetActive(false);
+        if (loupeRT != null) loupeRT.anchoredPosition = localPt;
+        float closestDist = 999f;
+        foreach (var d in activeOrder.diagnostics)
+        {
+            if (!d.found)
+            {
+                float curD = Vector2.Distance(localPt, new Vector2(d.x, d.y));
+                if (curD < closestDist) closestDist = curD;
+            }
+        }
+        float proximity = Mathf.Clamp01(1f - closestDist / 70f);
+        if (loupeGO != null)
+        {
+            Image loupeImg = loupeGO.GetComponent<Image>();
+            if (loupeImg != null) loupeImg.color = Color.Lerp(Color.white, new Color(1f, 0.90f, 0.50f, 1f), proximity);
+        }
+        if (loupeRT != null) loupeRT.localScale = Vector3.one * (1f + proximity * 0.08f);
+
+        foreach (var d in activeOrder.diagnostics)
+        {
+            if (!d.found && Vector2.Distance(localPt, new Vector2(d.x, d.y)) < d.r)
+            {
+                d.found = true;
+                zonesDiscovered++;
+                PlaySFX(clipCrystalChime, 0.8f, 0.95f + zonesDiscovered * 0.18f);
+                if (benchLogText != null) benchLogText.text += "\n\n• " + d.text;
+                if (bottomHintText != null) bottomHintText.text = $"Найдено повреждений под лупой: {zonesDiscovered} / 3";
+                EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
+                SpawnFloatingText(localPt + new Vector2(0, 24), "+1 Дефект обнаружен!", new Color(1f, 0.90f, 0.45f, 1f));
+                if (zonesDiscovered >= 3)
+                {
+                    PlaySFX(clipBell, 0.75f, 1.2f);
+                    EmitSparks(localPt, 16, new Color(1f, 0.95f, 0.50f, 1f));
+                    orderStage = "NEED_TOOLS";
+                    OpenWorkbenchView();
+                }
+            }
+        }
+    }
+
+    public void SimulateLoupeInspection(Vector2 localPt)
+    {
+        InspectWithLoupe(localPt);
+    }
+
+    public void ApplyScrubbing(Vector2 localPt, float speedRatio, float dt)
+    {
+        if (dirtMap == null) return;
+        int px = Mathf.FloorToInt(((localPt.x + 180f) / 360f) * TEX_SIZE);
+        int py = Mathf.FloorToInt(((localPt.y + 180f) / 360f) * TEX_SIZE);
+        bool modified = false;
+
+        float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
+        float dmgMult = upgStabilizer ? 0.4f : 1.0f;
+        int brushR = Mathf.RoundToInt(15 * radiusMult);
+
+        bool isTooFast = speedRatio > (upgStabilizer ? 0.86f : 0.72f);
+        for (int y = Mathf.Max(0, py - brushR); y <= Mathf.Min(TEX_SIZE - 1, py + brushR); y++)
+        {
+            for (int x = Mathf.Max(0, px - brushR); x <= Mathf.Min(TEX_SIZE - 1, px + brushR); x++)
+            {
+                if ((x - px) * (x - px) + (y - py) * (y - py) <= brushR * brushR)
+                {
+                    if (isTooFast)
+                    {
+                        dirtMap[y, x] = 3;
+                        modified = true;
+                    }
+                    else if (dirtMap[y, x] == 1 && speedRatio > 0.02f)
+                    {
+                        dirtMap[y, x] = 2;
+                        modified = true;
+                    }
+                }
+            }
+        }
+
+        if (modified && isTooFast)
+        {
+            overScrubDamage = Mathf.Min(100f, overScrubDamage + dt * 5.0f * dmgMult);
+        }
+
+        if (modified && !isTooFast)
+        {
+            sparkSpawnTimer += dt;
+            if (sparkSpawnTimer > 0.08f)
+            {
+                sparkSpawnTimer = 0f;
+                EmitSparks(localPt, 1, new Color(0.72f, 0.90f, 1f, 0.70f));
+            }
+        }
+
+        if (modified)
+        {
+            RefreshItemVisuals();
+            UpdateTopBar();
+            CheckMidOrderTwist();
+        }
+    }
+
+    public void ApplyGrinding(Vector2 localPt, float speedRatio, float dt)
+    {
+        if (burrMap == null) return;
+        if (cleanProgress < 35)
+        {
+            PlaySFX(clipSpringReset, 0.35f, 1.4f);
+            if (bottomHintText != null) bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала смойте хотя бы 35% окислов растворителем!";
+            return;
+        }
+        if (speedRatio < 0.26f)
+        {
+            if (bottomHintText != null) bottomHintText.text = "Слишком медленно для шлифовки! Быстро дергайте мышью из стороны в сторону по рыжим зазубринам!";
+            return;
+        }
+
+        int px = Mathf.FloorToInt(((localPt.x + 180f) / 360f) * TEX_SIZE);
+        int py = Mathf.FloorToInt(((localPt.y + 180f) / 360f) * TEX_SIZE);
+        bool modified = false;
+
+        float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
+        float dmgMult = upgStabilizer ? 0.4f : 1.0f;
+        int grindR = Mathf.RoundToInt(20 * radiusMult);
+        float grindPower = dt * (3.8f + speedRatio * 5.0f) * radiusMult;
+        bool hitBurr = false;
+
+        for (int y = Mathf.Max(0, py - grindR); y <= Mathf.Min(TEX_SIZE - 1, py + grindR); y++)
+        {
+            for (int x = Mathf.Max(0, px - grindR); x <= Mathf.Min(TEX_SIZE - 1, px + grindR); x++)
+            {
+                if ((x - px) * (x - px) + (y - py) * (y - py) <= grindR * grindR)
+                {
+                    if (burrMap[y, x] > 0.08f)
+                    {
+                        burrMap[y, x] = Mathf.Max(0.02f, burrMap[y, x] - grindPower);
+                        hitBurr = true;
+                        modified = true;
+                    }
+                }
+            }
+        }
+
+        if (hitBurr)
+        {
+            if (wrongToolScratches)
+                overScrubDamage = Mathf.Min(100f, overScrubDamage + dt * 2.8f * dmgMult);
+
+            sparkSpawnTimer += dt;
+            if (sparkSpawnTimer > 0.03f)
+            {
+                sparkSpawnTimer = 0f;
+                EmitSparks(localPt, 4, new Color(1f, 0.72f, 0.22f, 1f));
+            }
+        }
+
+        if (modified)
+        {
+            RefreshItemVisuals();
+            UpdateTopBar();
+            CheckMidOrderTwist();
+        }
+    }
+
+    public void ApplyPolishing(float speedRatio, float dt)
+    {
+        ApplyPolishing(Vector2.zero, speedRatio, dt);
+    }
+
+    public void ApplyPolishing(Vector2 localPt, float speedRatio, float dt)
+    {
+        if (cleanProgress < 65 || grindProgress < 65 || clickFixProgress < 100)
+        {
+            PlaySFX(clipSpringReset, 0.35f, 1.4f);
+            if (bottomHintText != null) bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала завершите Очистку, Шлифовку и Закрепку всех 4 узлов кликами!";
+            return;
+        }
+
+        if (speedRatio > 0.03f && speedRatio < 0.82f)
+        {
+            float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
+            float prevFinish = finishProgress;
+            finishProgress = Mathf.Min(100f, finishProgress + dt * 48f * radiusMult);
+            if (prevFinish < 80f && finishProgress >= 80f)
+            {
+                SpawnFloatingText(new Vector2(0, 80), "✓ Лоск наведен (80%+)", new Color(0.40f, 1f, 0.60f, 1f));
+            }
+            if (prevFinish < 100f && finishProgress >= 100f)
+            {
+                PlaySFX(clipBell, 0.85f, 1.25f);
+                EmitSparks(localPt, 14, new Color(1f, 0.95f, 0.65f, 1f));
+                if (bottomHintText != null) bottomHintText.text = "РЕСТАВРАЦИЯ ЗАВЕРШЕНА! Нажмите 'Завершить и отнести в Окно заказов'.";
+                SpawnFloatingText(new Vector2(0, 80), "★ ИДЕАЛЬНЫЙ ЛОСК (100%)", new Color(1f, 0.95f, 0.50f, 1f));
+            }
+            sparkSpawnTimer += dt;
+            if (sparkSpawnTimer > 0.07f)
+            {
+                sparkSpawnTimer = 0f;
+                EmitSparks(localPt, 2, new Color(1f, 0.96f, 0.65f, 1f));
+            }
+
+            RefreshItemVisuals();
+            UpdateTopBar();
+            CheckMidOrderTwist();
         }
     }
 
@@ -3520,36 +4730,123 @@ public class LuaBootstrapper : MonoBehaviour
         Vector3 mousePos = Input.mousePosition;
 
         UpdateSparks(dt);
+        UpdateFireplaceSparks(dt);
         UpdateFloatingTexts(dt);
         UpdateClickNodesDecay(dt);
         UpdateDustMotes(dt);
-        if (catRT != null) catRT.localScale = Vector3.Lerp(catRT.localScale, Vector3.one, dt * 6f);
+        StepCatBreathing(dt);
 
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (TimeController.Instance != null)
         {
-            if (viewState == "CERTIFICATE")
+            TimeController.Instance.AdvanceTime(dt);
+            float shiftSec = TimeController.Instance.ShiftTimeSeconds;
+
+            float hourAngle = (shiftSec / 720f) * 360f;
+            if (hourHandRT != null) hourHandRT.localEulerAngles = new Vector3(0f, 0f, -hourAngle);
+
+            float minuteAngle = ((shiftSec % 60f) / 60f) * 360f;
+            if (minuteHandRT != null) minuteHandRT.localEulerAngles = new Vector3(0f, 0f, -minuteAngle);
+
+            string phase = TimeController.Instance.CurrentPhase;
+            int phaseIdx = TimeController.Instance.CurrentPhaseIndex;
+            float prog = TimeController.Instance.PhaseProgress;
+
+            if (clockPhaseText != null) clockPhaseText.text = phase.ToUpper();
+            if (clockDigitalText != null)
             {
-                PlaySFX(clipClickPin, 0.4f, 0.9f);
-                SetViewState("UPGRADES");
-                SelectMasterStandTab(1);
+                int m = Mathf.FloorToInt(shiftSec / 60f);
+                int s = Mathf.FloorToInt(shiftSec % 60f);
+                clockDigitalText.text = $"{m:D2}:{s:D2} / 12:00";
             }
-            else if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
+            if (clockPhaseFillRT != null)
             {
-                PlaySFX(clipClickPin, 0.4f, 0.9f);
-                SetViewState("ROOM");
+                clockPhaseFillRT.sizeDelta = new Vector2(56f * prog, 0f);
+            }
+
+            Color[] gemCols = {
+                new Color(0.45f, 0.85f, 1f, 1f),
+                new Color(1f, 0.88f, 0.35f, 1f),
+                new Color(1f, 0.55f, 0.25f, 1f),
+                new Color(0.55f, 0.55f, 0.95f, 1f)
+            };
+            for (int i = 0; i < 4; i++)
+            {
+                if (clockPhaseGemImgs[i] != null)
+                {
+                    if (i == phaseIdx)
+                    {
+                        float pulse = 0.85f + Mathf.Sin(Time.time * 3f) * 0.15f;
+                        clockPhaseGemImgs[i].color = gemCols[i] * pulse;
+                        clockPhaseGemImgs[i].transform.localScale = Vector3.one * 1.15f;
+                    }
+                    else if (i < phaseIdx)
+                    {
+                        clockPhaseGemImgs[i].color = gemCols[i] * 0.65f;
+                        clockPhaseGemImgs[i].transform.localScale = Vector3.one;
+                    }
+                    else
+                    {
+                        clockPhaseGemImgs[i].color = new Color(0.30f, 0.28f, 0.25f, 0.55f);
+                        clockPhaseGemImgs[i].transform.localScale = Vector3.one;
+                    }
+                }
+            }
+
+            if (winGlowImg != null && benchGlowImg != null && prog > 0.001f)
+            {
+                winGlowImg.color = TimeController.Instance.GetWindowColor(phase, prog);
+                benchGlowImg.color = TimeController.Instance.GetAmbientColor(phase, prog);
+                if (ambientTintImg != null)
+                {
+                    Color t0 = (phaseIdx == 0) ? new Color(0.72f, 0.84f, 1.0f, 0.06f) :
+                               (phaseIdx == 1) ? new Color(1.0f, 0.98f, 0.92f, 0.03f) :
+                               (phaseIdx == 2) ? new Color(1.0f, 0.55f, 0.22f, 0.14f) :
+                                                 new Color(0.12f, 0.18f, 0.40f, 0.26f);
+                    int nextIdx = Mathf.Min(3, phaseIdx + 1);
+                    Color t1 = (nextIdx == 0) ? new Color(0.72f, 0.84f, 1.0f, 0.06f) :
+                               (nextIdx == 1) ? new Color(1.0f, 0.98f, 0.92f, 0.03f) :
+                               (nextIdx == 2) ? new Color(1.0f, 0.55f, 0.22f, 0.14f) :
+                                                 new Color(0.12f, 0.18f, 0.40f, 0.26f);
+                    ambientTintImg.color = Color.Lerp(t0, t1, prog);
+                }
             }
         }
-        if (Input.GetKeyDown(KeyCode.M))
+        if (clockWidgetRT != null) clockWidgetRT.localScale = Vector3.Lerp(clockWidgetRT.localScale, Vector3.one, dt * 8f);
+
+        if (viewState == "ROOM")
         {
-            ToggleMute();
-        }
-        if (viewState == "WORKBENCH")
-        {
-            if (Input.GetKeyDown(KeyCode.Alpha1)) SelectBenchTool("CLEAN");
-            else if (Input.GetKeyDown(KeyCode.Alpha2)) SelectBenchTool("GRIND");
-            else if (Input.GetKeyDown(KeyCode.Alpha3)) SelectBenchTool("CLICK_FIX");
-            else if (Input.GetKeyDown(KeyCode.Alpha4)) SelectBenchTool("FINISH");
-            else if (Input.GetKeyDown(KeyCode.Z)) CycleBenchZoom();
+            float t = Time.time;
+            for (int i = 0; i < 5; i++)
+            {
+                if (flameTongueRTs[i] != null)
+                {
+                    float freq = flameFrequencies[i];
+                    float phase = flamePhases[i];
+                    float sy = flameBaseSizes[i].y * (1f + 0.30f * Mathf.Sin(t * freq + phase) + 0.15f * Mathf.Cos(t * freq * 1.6f));
+                    float sx = flameBaseSizes[i].x * (1f + 0.16f * Mathf.Cos(t * freq * 0.8f + phase));
+                    float rotZ = Mathf.Sin(t * 8f + phase) * 9f;
+                    flameTongueRTs[i].sizeDelta = new Vector2(sx, sy);
+                    flameTongueRTs[i].localEulerAngles = new Vector3(0f, 0f, rotZ);
+                }
+            }
+
+            if (fireplaceGlowImg != null)
+            {
+                float flicker = Mathf.Sin(t * 6.8f) * 0.04f + Mathf.Sin(t * 14.2f) * 0.02f + (Mathf.PerlinNoise(t * 4f, 0f) - 0.5f) * 0.06f;
+                float baseAlpha = (completedOrdersCount >= 3) ? 0.44f : 0.30f;
+                if (fireplaceStokeTimer > 0f)
+                {
+                    fireplaceStokeTimer -= dt;
+                    baseAlpha += 0.18f * (fireplaceStokeTimer / 2.5f);
+                }
+                fireplaceGlowImg.color = new Color(1f, 0.62f, 0.22f, Mathf.Clamp01(baseAlpha + flicker));
+            }
+
+            if (candleFlameBenchRT != null)
+            {
+                float cFlicker = Mathf.Sin(t * 19.4f) * 0.08f + Mathf.Sin(t * 7.8f) * 0.12f;
+                candleFlameBenchRT.localScale = new Vector3(1f + cFlicker * 0.5f, 1f + cFlicker, 1f);
+            }
         }
 
         if (Input.GetMouseButtonDown(1))
@@ -3585,41 +4882,7 @@ public class LuaBootstrapper : MonoBehaviour
                 }
             }
 
-            float distToTarget = Vector2.Distance(playerPos, targetPos);
-            if (distToTarget > 2f)
-            {
-                float stepSpeed = Mathf.Min(moveSpeed, distToTarget * 8.5f);
-                playerPos = Vector2.MoveTowards(playerPos, targetPos, stepSpeed * dt);
-                walkAnimTimer += dt * 14f;
-                float bobY = Mathf.Abs(Mathf.Sin(walkAnimTimer)) * 5.5f;
-                playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + bobY);
-
-                float moveDeltaX = targetPos.x - playerPos.x;
-                if (Mathf.Abs(moveDeltaX) > 1.5f)
-                {
-                    float sign = Mathf.Sign(moveDeltaX);
-                    playerRT.localScale = new Vector3(sign, 1f, 1f);
-                    playerBubbleText.transform.parent.localScale = new Vector3(sign, 1f, 1f);
-                }
-
-                stepSoundTimer -= dt;
-                if (stepSoundTimer <= 0f)
-                {
-                    stepSoundTimer = 0.26f;
-                    PlaySFX(clipStep, 0.45f, Random.Range(0.92f, 1.08f));
-                }
-            }
-            else
-            {
-                float idleBreathing = Mathf.Sin(Time.time * 2.4f) * 1.6f;
-                playerRT.anchoredPosition = new Vector2(playerPos.x, playerPos.y + idleBreathing);
-                if (!string.IsNullOrEmpty(pendingStation))
-                {
-                    string st = pendingStation;
-                    pendingStation = null;
-                    OnPlayerArrivedAtStation(st);
-                }
-            }
+            StepPlayerMovement(dt);
 
             if (markerAlpha > 0f)
             {
@@ -3633,7 +4896,7 @@ public class LuaBootstrapper : MonoBehaviour
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.05f)
             {
-                targetBenchZoom = Mathf.Clamp(targetBenchZoom + scroll * 0.25f, 1.0f, 2.0f);
+                StepBenchZoom(scroll * 0.25f);
             }
             benchZoom = Mathf.Lerp(benchZoom, targetBenchZoom, dt * 10f);
             itemSurfaceRT.localScale = new Vector3(benchZoom, benchZoom, 1f);
@@ -3686,26 +4949,7 @@ public class LuaBootstrapper : MonoBehaviour
 
                 if (Input.GetMouseButton(0))
                 {
-                    foreach (var d in activeOrder.diagnostics)
-                    {
-                        if (!d.found && Vector2.Distance(localPt, new Vector2(d.x, d.y)) < d.r)
-                        {
-                            d.found = true;
-                            zonesDiscovered++;
-                            PlaySFX(clipCrystalChime, 0.8f, 0.95f + zonesDiscovered * 0.18f);
-                            benchLogText.text += "\n\n• " + d.text;
-                            bottomHintText.text = $"Найдено повреждений под лупой: {zonesDiscovered} / 3";
-                            EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
-                            SpawnFloatingText(localPt + new Vector2(0, 24), "+1 Дефект обнаружен!", new Color(1f, 0.90f, 0.45f, 1f));
-                            if (zonesDiscovered >= 3)
-                            {
-                                PlaySFX(clipBell, 0.75f, 1.2f);
-                                EmitSparks(localPt, 16, new Color(1f, 0.95f, 0.50f, 1f));
-                                orderStage = "NEED_TOOLS";
-                                OpenWorkbenchView();
-                            }
-                        }
-                    }
+                    InspectWithLoupe(localPt);
                 }
             }
             else if ((orderStage == "READY_TO_RESTORE" || orderStage == "READY_TO_SUBMIT") && isInside)
@@ -3795,132 +5039,17 @@ public class LuaBootstrapper : MonoBehaviour
 
                 if (holdingMouse)
                 {
-                    int px = Mathf.FloorToInt(((localPt.x + 180f) / 360f) * TEX_SIZE);
-                    int py = Mathf.FloorToInt(((localPt.y + 180f) / 360f) * TEX_SIZE);
-                    bool modified = false;
-
-                    float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
-                    float dmgMult = upgStabilizer ? 0.4f : 1.0f;
-                    int brushR = Mathf.RoundToInt(15 * radiusMult);
-
                     if (activeBenchAction == "CLEAN")
                     {
-                        bool isTooFast = speedRatio > (upgStabilizer ? 0.86f : 0.72f);
-                        for (int y = Mathf.Max(0, py - brushR); y <= Mathf.Min(TEX_SIZE - 1, py + brushR); y++)
-                        {
-                            for (int x = Mathf.Max(0, px - brushR); x <= Mathf.Min(TEX_SIZE - 1, px + brushR); x++)
-                            {
-                                if ((x - px) * (x - px) + (y - py) * (y - py) <= brushR * brushR)
-                                {
-                                    if (isTooFast)
-                                    {
-                                        dirtMap[y, x] = 3;
-                                        overScrubDamage = Mathf.Min(100f, overScrubDamage + dt * 5.0f * dmgMult);
-                                        modified = true;
-                                    }
-                                    else if (dirtMap[y, x] == 1 && speedRatio > 0.02f)
-                                    {
-                                        dirtMap[y, x] = 2;
-                                        modified = true;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (modified && !isTooFast)
-                        {
-                            sparkSpawnTimer += dt;
-                            if (sparkSpawnTimer > 0.08f)
-                            {
-                                sparkSpawnTimer = 0f;
-                                EmitSparks(localPt, 1, new Color(0.72f, 0.90f, 1f, 0.70f));
-                            }
-                        }
+                        ApplyScrubbing(localPt, speedRatio, dt);
                     }
                     else if (activeBenchAction == "GRIND")
                     {
-                        if (cleanProgress < 35)
-                        {
-                            PlaySFX(clipSpringReset, 0.35f, 1.4f);
-                            bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала смойте хотя бы 35% окислов растворителем!";
-                        }
-                        else if (speedRatio < 0.26f)
-                        {
-                            bottomHintText.text = "Слишком медленно для шлифовки! Быстро дергайте мышью из стороны в сторону по рыжим зазубринам!";
-                        }
-                        else
-                        {
-                            int grindR = Mathf.RoundToInt(20 * radiusMult);
-                            float grindPower = dt * (3.8f + speedRatio * 5.0f) * radiusMult;
-                            bool hitBurr = false;
-
-                            for (int y = Mathf.Max(0, py - grindR); y <= Mathf.Min(TEX_SIZE - 1, py + grindR); y++)
-                            {
-                                for (int x = Mathf.Max(0, px - grindR); x <= Mathf.Min(TEX_SIZE - 1, px + grindR); x++)
-                                {
-                                    if ((x - px) * (x - px) + (y - py) * (y - py) <= grindR * grindR)
-                                    {
-                                        if (burrMap[y, x] > 0.08f)
-                                        {
-                                            burrMap[y, x] = Mathf.Max(0.02f, burrMap[y, x] - grindPower);
-                                            hitBurr = true;
-                                            modified = true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (hitBurr)
-                            {
-                                if (wrongToolScratches)
-                                    overScrubDamage = Mathf.Min(100f, overScrubDamage + dt * 2.8f * dmgMult);
-
-                                sparkSpawnTimer += dt;
-                                if (sparkSpawnTimer > 0.03f)
-                                {
-                                    sparkSpawnTimer = 0f;
-                                    EmitSparks(localPt, 4, new Color(1f, 0.72f, 0.22f, 1f));
-                                }
-                            }
-                        }
+                        ApplyGrinding(localPt, speedRatio, dt);
                     }
                     else if (activeBenchAction == "FINISH")
                     {
-                        if (cleanProgress < 65 || grindProgress < 65 || clickFixProgress < 100)
-                        {
-                            PlaySFX(clipSpringReset, 0.35f, 1.4f);
-                            bottomHintText.text = "НАРУШЕН ПОРЯДОК: Сначала завершите Очистку, Шлифовку и Закрепку всех 4 узлов кликами!";
-                        }
-                        else if (speedRatio > 0.03f && speedRatio < 0.82f)
-                        {
-                            float prevFinish = finishProgress;
-                            finishProgress = Mathf.Min(100f, finishProgress + dt * 48f * radiusMult);
-                            if (prevFinish < 80f && finishProgress >= 80f)
-                            {
-                                SpawnFloatingText(new Vector2(0, 80), "✓ Лоск наведен (80%+)", new Color(0.40f, 1f, 0.60f, 1f));
-                            }
-                            if (prevFinish < 100f && finishProgress >= 100f)
-                            {
-                                PlaySFX(clipBell, 0.85f, 1.25f);
-                                EmitSparks(localPt, 14, new Color(1f, 0.95f, 0.65f, 1f));
-                                bottomHintText.text = "РЕСТАВРАЦИЯ ЗАВЕРШЕНА! Нажмите 'Завершить и отнести в Окно заказов'.";
-                                SpawnFloatingText(new Vector2(0, 80), "★ ИДЕАЛЬНЫЙ ЛОСК (100%)", new Color(1f, 0.95f, 0.50f, 1f));
-                            }
-                            modified = true;
-                            sparkSpawnTimer += dt;
-                            if (sparkSpawnTimer > 0.07f)
-                            {
-                                sparkSpawnTimer = 0f;
-                                EmitSparks(localPt, 2, new Color(1f, 0.96f, 0.65f, 1f));
-                            }
-                        }
-                    }
-
-                    if (modified)
-                    {
-                        RefreshItemVisuals();
-                        UpdateTopBar();
-                        CheckMidOrderTwist();
+                        ApplyPolishing(localPt, speedRatio, dt);
                     }
                 }
             }

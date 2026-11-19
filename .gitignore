@@ -64,3 +64,5 @@ Thumbs.db
 # Setup scripts and test markers
 setup_git.*
 
+
+*.log
