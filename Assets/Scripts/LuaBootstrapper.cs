@@ -383,14 +383,14 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeSecretClip()
     {
         int sampleRate = 44100;
-        int samples = Mathf.RoundToInt(sampleRate * 0.9f);
+        int samples = Mathf.RoundToInt(sampleRate * 0.85f);
         float[] data = new float[samples];
         for (int i = 0; i < samples; i++)
         {
             float t = i / (float)sampleRate;
-            float snap = (t < 0.05f) ? Mathf.Sin(2f * Mathf.PI * 1850f * t) * Mathf.Exp(-90f * t) : 0f;
-            float chime = Mathf.Sin(2f * Mathf.PI * 880f * t) * Mathf.Exp(-4.5f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 1320f * t) * Mathf.Exp(-6f * t) * 0.35f;
-            data[i] = Mathf.Clamp(snap * 0.75f + chime * 0.65f, -1f, 1f);
+            float snap = (t < 0.04f) ? Mathf.Sin(2f * Mathf.PI * 1420f * t) * Mathf.Exp(-85f * t) : 0f;
+            float chime = Mathf.Sin(2f * Mathf.PI * 880f * t) * Mathf.Exp(-4.0f * t) * 0.55f + Mathf.Sin(2f * Mathf.PI * 1174.66f * t) * Mathf.Exp(-4.5f * t) * 0.35f;
+            data[i] = Mathf.Clamp(snap * 0.65f + chime * 0.60f, -0.95f, 0.95f);
         }
         AudioClip clip = AudioClip.Create("SynthesizedSecret", samples, 1, sampleRate, false);
         clip.SetData(data, 0);
@@ -542,16 +542,19 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeBellClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.75f);
+        int len = Mathf.FloorToInt(sr * 0.85f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 5.5f);
-            float w = Mathf.Sin(2f * Mathf.PI * 1046.5f * t) * 0.6f
-                    + Mathf.Sin(2f * Mathf.PI * 2093.0f * t) * 0.3f
-                    + Mathf.Sin(2f * Mathf.PI * 3139.5f * t) * 0.15f;
-            data[i] = w * env * 0.5f;
+            float attack = Mathf.Clamp01(t / 0.003f);
+            float env = attack * Mathf.Exp(-t * 4.2f);
+            float harmonicEnv = attack * Mathf.Exp(-t * 7.5f);
+            float w = Mathf.Sin(2f * Mathf.PI * 659.25f * t) * 0.52f
+                    + Mathf.Sin(2f * Mathf.PI * 830.61f * t) * 0.32f
+                    + Mathf.Sin(2f * Mathf.PI * 987.77f * t) * 0.22f
+                    + Mathf.Sin(2f * Mathf.PI * 1318.5f * t) * harmonicEnv * 0.18f;
+            data[i] = Mathf.Clamp(w * env * 0.48f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcBell", len, 1, sr, false);
         c.SetData(data, 0);
@@ -561,14 +564,20 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeStepClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.09f);
+        int len = Mathf.FloorToInt(sr * 0.11f);
         float[] data = new float[len];
+        float filtered = 0f;
+        System.Random rnd = new System.Random(17);
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 45f);
-            float thud = Mathf.Sin(2f * Mathf.PI * 130f * t) + (Random.value * 2f - 1f) * 0.3f;
-            data[i] = thud * env * 0.35f;
+            float attack = Mathf.Clamp01(t / 0.004f);
+            float env = attack * Mathf.Exp(-t * 36f);
+            float freq = Mathf.Lerp(120f, 75f, t / 0.11f);
+            float woodThud = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.65f;
+            float white = (float)(rnd.NextDouble() * 2.0 - 1.0);
+            filtered = Mathf.Lerp(filtered, white, 0.12f);
+            data[i] = Mathf.Clamp((woodThud + filtered * 0.35f) * env * 0.35f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcStep", len, 1, sr, false);
         c.SetData(data, 0);
@@ -578,14 +587,15 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeClickClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.11f);
+        int len = Mathf.FloorToInt(sr * 0.08f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 38f);
-            float snap = Mathf.Sin(2f * Mathf.PI * 1650f * t) * 0.7f + Mathf.Sin(2f * Mathf.PI * 2850f * t) * 0.3f;
-            data[i] = snap * env * 0.5f;
+            float attack = Mathf.Clamp01(t / 0.002f);
+            float env = attack * Mathf.Exp(-t * 52f);
+            float snap = Mathf.Sin(2f * Mathf.PI * 880f * t) * 0.6f + Mathf.Sin(2f * Mathf.PI * 1320f * t) * 0.35f;
+            data[i] = Mathf.Clamp(snap * env * 0.38f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcClick", len, 1, sr, false);
         c.SetData(data, 0);
@@ -595,14 +605,17 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeSpringResetClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.38f);
+        int len = Mathf.FloorToInt(sr * 0.35f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 8f);
-            float freq = Mathf.Lerp(520f, 180f, t / 0.38f) + Mathf.Sin(t * 95f) * 35f;
-            data[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.5f;
+            float attack = Mathf.Clamp01(t / 0.003f);
+            float env = attack * Mathf.Exp(-t * 9.5f);
+            float click = (t < 0.025f) ? Mathf.Sin(2f * Mathf.PI * 980f * t) * Mathf.Exp(-110f * t) * 0.4f : 0f;
+            float springTone = Mathf.Sin(2f * Mathf.PI * Mathf.Lerp(554.37f, 659.25f, Mathf.Clamp01(t * 4f)) * t) * 0.45f
+                             + Mathf.Sin(2f * Mathf.PI * 987.77f * t) * 0.2f * Mathf.Exp(-t * 14f);
+            data[i] = Mathf.Clamp((click + springTone) * env * 0.5f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcSpringReset", len, 1, sr, false);
         c.SetData(data, 0);
@@ -614,13 +627,17 @@ public class LuaBootstrapper : MonoBehaviour
         int sr = 44100;
         int len = sr / 2;
         float[] data = new float[len];
+        float filtered = 0f;
+        System.Random rnd = new System.Random(101);
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float buzz = Mathf.Sin(2f * Mathf.PI * 220f * t) * 0.4f
-                       + Mathf.Sin(2f * Mathf.PI * 440f * t + Mathf.Sin(t * 60f) * 3f) * 0.3f
-                       + (Random.value * 2f - 1f) * 0.22f;
-            data[i] = buzz * 0.4f;
+            float white = (float)(rnd.NextDouble() * 2.0 - 1.0);
+            filtered = Mathf.Lerp(filtered, white, 0.08f);
+            float warmBody = Mathf.Sin(2f * Mathf.PI * 146.83f * t) * 0.18f + Mathf.Sin(2f * Mathf.PI * 220f * t) * 0.12f;
+            float swirl = 0.75f + 0.25f * Mathf.Sin(2f * Mathf.PI * 4f * t);
+            float loopFade = Mathf.Sin(Mathf.PI * (i / (float)len));
+            data[i] = (filtered * 0.55f + warmBody) * swirl * Mathf.Lerp(0.85f, 1f, loopFade) * 0.32f;
         }
         AudioClip c = AudioClip.Create("ProcGrind", len, 1, sr, false);
         c.SetData(data, 0);
@@ -632,13 +649,18 @@ public class LuaBootstrapper : MonoBehaviour
         int sr = 44100;
         int len = sr / 2;
         float[] data = new float[len];
-        float last = 0f;
+        float lowFilter = 0f;
+        float midFilter = 0f;
+        System.Random rnd = new System.Random(202);
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float n = (Random.value * 2f - 1f);
-            last = Mathf.Lerp(last, n, 0.12f);
-            data[i] = last * (0.6f + 0.4f * Mathf.Sin(t * Mathf.PI * 4f)) * 0.35f;
+            float n = (float)(rnd.NextDouble() * 2.0 - 1.0);
+            midFilter = Mathf.Lerp(midFilter, n, 0.09f);
+            lowFilter = Mathf.Lerp(lowFilter, midFilter, 0.15f);
+            float sweep = 0.7f + 0.3f * Mathf.Sin(2f * Mathf.PI * 2f * t);
+            float seam = Mathf.Sin(Mathf.PI * (i / (float)len));
+            data[i] = lowFilter * sweep * Mathf.Lerp(0.9f, 1f, seam) * 0.32f;
         }
         AudioClip c = AudioClip.Create("ProcClean", len, 1, sr, false);
         c.SetData(data, 0);
@@ -653,9 +675,22 @@ public class LuaBootstrapper : MonoBehaviour
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float freq = (t < 0.14f) ? 1318.5f : 1760.0f;
-            float env = Mathf.Exp(-(t % 0.14f) * 9f);
-            data[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.45f;
+            float s = 0f;
+            float t1 = t;
+            if (t1 >= 0f)
+            {
+                float att1 = Mathf.Clamp01(t1 / 0.002f);
+                float env1 = att1 * Mathf.Exp(-t1 * 7.5f);
+                s += (Mathf.Sin(2f * Mathf.PI * 1318.5f * t1) * 0.55f + Mathf.Sin(2f * Mathf.PI * 2637f * t1) * 0.2f) * env1;
+            }
+            float t2 = t - 0.11f;
+            if (t2 >= 0f)
+            {
+                float att2 = Mathf.Clamp01(t2 / 0.002f);
+                float env2 = att2 * Mathf.Exp(-t2 * 9.0f);
+                s += (Mathf.Sin(2f * Mathf.PI * 1661.2f * t2) * 0.50f + Mathf.Sin(2f * Mathf.PI * 1975.5f * t2) * 0.3f) * env2;
+            }
+            data[i] = Mathf.Clamp(s * 0.42f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcCoin", len, 1, sr, false);
         c.SetData(data, 0);
@@ -665,14 +700,27 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeFailClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.65f);
+        int len = Mathf.FloorToInt(sr * 0.32f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float freq = (t < 0.3f) ? 196f : 146.8f;
-            float env = Mathf.Exp(-t * 3.5f);
-            data[i] = (Mathf.Sin(2f * Mathf.PI * freq * t) + 0.4f * Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t)) * env * 0.4f;
+            float s = 0f;
+            float t1 = t;
+            if (t1 >= 0f)
+            {
+                float att1 = Mathf.Clamp01(t1 / 0.003f);
+                float env1 = att1 * Mathf.Exp(-t1 * 28f);
+                s += (Mathf.Sin(2f * Mathf.PI * 220f * t1) * 0.6f + Mathf.Sin(2f * Mathf.PI * 110f * t1) * 0.4f) * env1;
+            }
+            float t2 = t - 0.09f;
+            if (t2 >= 0f)
+            {
+                float att2 = Mathf.Clamp01(t2 / 0.003f);
+                float env2 = att2 * Mathf.Exp(-t2 * 32f);
+                s += (Mathf.Sin(2f * Mathf.PI * 185f * t2) * 0.5f + Mathf.Sin(2f * Mathf.PI * 92.5f * t2) * 0.35f) * env2;
+            }
+            data[i] = Mathf.Clamp(s * 0.38f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcFail", len, 1, sr, false);
         c.SetData(data, 0);
@@ -684,27 +732,23 @@ public class LuaBootstrapper : MonoBehaviour
         int sr = 44100;
         int len = sr * 4;
         float[] data = new float[len];
-        System.Random rnd = new System.Random(42);
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
             float s = 0f;
             float secFrac = t - Mathf.Floor(t);
             int secIdx = Mathf.FloorToInt(t);
-            if (secFrac < 0.12f)
+            if (secFrac < 0.09f)
             {
-                float freq = (secIdx % 2 == 0) ? 1160f : 940f;
-                float bodyFreq = (secIdx % 2 == 0) ? 280f : 240f;
-                float env = Mathf.Exp(-secFrac * 58f);
-                float strike = Mathf.Sin(2f * Mathf.PI * freq * secFrac) * 0.55f + Mathf.Sin(2f * Mathf.PI * bodyFreq * secFrac) * 0.45f;
-                s += strike * env * 0.28f;
+                float bodyFreq = (secIdx % 2 == 0) ? 330f : 260f;
+                float woodFreq = (secIdx % 2 == 0) ? 660f : 520f;
+                float att = Mathf.Clamp01(secFrac / 0.003f);
+                float env = att * Mathf.Exp(-secFrac * 42f);
+                float strike = Mathf.Sin(2f * Mathf.PI * bodyFreq * secFrac) * 0.6f
+                             + Mathf.Sin(2f * Mathf.PI * woodFreq * secFrac) * 0.3f;
+                s += strike * env * 0.22f;
             }
-            if (rnd.NextDouble() < 0.00075)
-            {
-                float pop = (float)(rnd.NextDouble() * 2.0 - 1.0) * 0.14f;
-                s += pop;
-            }
-            s += Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.012f;
+            s += Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.008f;
             data[i] = Mathf.Clamp(s, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcAmbience", len, 1, sr, false);
@@ -715,14 +759,27 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeCrystalChimeClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.55f);
+        int len = Mathf.FloorToInt(sr * 0.75f);
         float[] data = new float[len];
+        float[] notes = { 1046.5f, 1318.5f, 1567.98f, 2093f };
+        float step = 0.065f;
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 9f);
-            float tone = Mathf.Sin(2f * Mathf.PI * 1760f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 3520f * t) * 0.25f + Mathf.Sin(2f * Mathf.PI * 5280f * t) * 0.1f;
-            data[i] = tone * env * 0.42f;
+            float s = 0f;
+            for (int n = 0; n < notes.Length; n++)
+            {
+                float nt = t - n * step;
+                if (nt >= 0f)
+                {
+                    float att = Mathf.Clamp01(nt / 0.003f);
+                    float env = att * Mathf.Exp(-nt * 5.2f);
+                    float wave = Mathf.Sin(2f * Mathf.PI * notes[n] * nt) * 0.5f
+                               + Mathf.Sin(2f * Mathf.PI * notes[n] * 2f * nt) * 0.15f;
+                    s += wave * env;
+                }
+            }
+            data[i] = Mathf.Clamp(s * 0.38f, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcCrystalChime", len, 1, sr, false);
         c.SetData(data, 0);
@@ -732,17 +789,26 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizePurrClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 1.35f);
+        int len = Mathf.FloorToInt(sr * 1.4f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float purrRhythm = Mathf.Sin(2f * Mathf.PI * 23f * t);
+            float chirp = 0f;
+            if (t < 0.16f)
+            {
+                float ct = t / 0.16f;
+                float cEnv = Mathf.Sin(Mathf.PI * ct);
+                float cFreq = Mathf.Lerp(480f, 680f, ct);
+                chirp = Mathf.Sin(2f * Mathf.PI * cFreq * t) * cEnv * 0.28f;
+            }
+            float purrRhythm = Mathf.Sin(2f * Mathf.PI * 24f * t);
             float purrMod = Mathf.Max(0f, purrRhythm);
-            float tone = Mathf.Sin(2f * Mathf.PI * 72f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 144f * t) * 0.35f;
-            float breath = Mathf.Sin(2f * Mathf.PI * 1.5f * t) * 0.5f + 0.5f;
-            float env = Mathf.Sin(Mathf.PI * (t / 1.35f));
-            data[i] = tone * purrMod * breath * env * 0.55f;
+            float tone = Mathf.Sin(2f * Mathf.PI * 68f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 136f * t) * 0.35f;
+            float breath = Mathf.Sin(2f * Mathf.PI * 1.4f * t) * 0.4f + 0.6f;
+            float env = Mathf.Sin(Mathf.PI * (t / 1.4f));
+            float purr = tone * purrMod * breath * env * 0.48f;
+            data[i] = Mathf.Clamp(chirp + purr, -0.95f, 0.95f);
         }
         AudioClip c = AudioClip.Create("ProcPurr", len, 1, sr, false);
         c.SetData(data, 0);
@@ -752,14 +818,17 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip SynthesizeToolSwitchClip()
     {
         int sr = 44100;
-        int len = Mathf.FloorToInt(sr * 0.16f);
+        int len = Mathf.FloorToInt(sr * 0.12f);
         float[] data = new float[len];
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float env = Mathf.Exp(-t * 26f);
-            float s = Mathf.Sin(2f * Mathf.PI * (920f + t * 450f) * t) * 0.4f + (Random.value * 2f - 1f) * 0.15f * env;
-            data[i] = s * env * 0.45f;
+            float att = Mathf.Clamp01(t / 0.002f);
+            float env = att * Mathf.Exp(-t * 36f);
+            float clack = Mathf.Sin(2f * Mathf.PI * 440f * t) * 0.55f
+                        + Mathf.Sin(2f * Mathf.PI * 880f * t) * 0.30f
+                        + Mathf.Sin(2f * Mathf.PI * 1320f * t) * 0.15f;
+            data[i] = clack * env * 0.35f;
         }
         AudioClip c = AudioClip.Create("ProcToolSwitch", len, 1, sr, false);
         c.SetData(data, 0);
@@ -772,34 +841,37 @@ public class LuaBootstrapper : MonoBehaviour
         int len = sr * 12;
         float[] data = new float[len];
 
-        float[] bassFreqs = { 110.0f, 87.31f, 73.42f, 82.41f };
-        float[] melodyFreqs = { 659.25f, 523.25f, 493.88f, 523.25f, 440.0f, 415.30f, 440.0f, 493.88f, 523.25f, 659.25f, 587.33f, 493.88f };
-        float noteDur = len / (float)(melodyFreqs.Length * sr);
+        float[] bassNotes = { 98.00f, 73.42f, 82.41f, 61.74f, 65.41f, 98.00f, 110.00f, 73.42f };
+        float[] melodyNotes = { 392.00f, 493.88f, 587.33f, 739.99f, 659.25f, 587.33f, 659.25f, 783.99f, 987.77f, 587.33f, 523.25f, 493.88f, 523.25f, 659.25f, 783.99f, 493.88f, 587.33f, 392.00f, 440.00f, 523.25f, 659.25f, 587.33f, 369.99f, 392.00f };
+        float noteDur = len / (float)(melodyNotes.Length * sr);
+        float barDur = len / (float)(bassNotes.Length * sr);
 
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            int barIdx = Mathf.Clamp(Mathf.FloorToInt(t / 3.0f), 0, 3);
-            float bassF = bassFreqs[barIdx];
-            float vibrato = Mathf.Sin(2f * Mathf.PI * 4.5f * t) * 1.8f;
-            float cello = Mathf.Sin(2f * Mathf.PI * (bassF + vibrato) * t) * 0.45f
-                        + Mathf.Sin(2f * Mathf.PI * (bassF * 2f) * t) * 0.22f
-                        + Mathf.Sin(2f * Mathf.PI * (bassF * 3f) * t) * 0.10f;
 
-            int melIdx = Mathf.Clamp(Mathf.FloorToInt(t / noteDur), 0, melodyFreqs.Length - 1);
-            float noteT = t - (melIdx * noteDur);
-            float melF = melodyFreqs[melIdx];
-            float melEnv = Mathf.Exp(-noteT * 3.2f);
-            float musicBox = (Mathf.Sin(2f * Mathf.PI * melF * t) * 0.50f
-                            + Mathf.Sin(2f * Mathf.PI * melF * 2f * t) * 0.25f
-                            + Mathf.Sin(2f * Mathf.PI * melF * 3f * t) * 0.12f) * melEnv;
+            int bIdx = Mathf.Clamp(Mathf.FloorToInt(t / barDur), 0, bassNotes.Length - 1);
+            float bTime = t - bIdx * barDur;
+            float bFreq = bassNotes[bIdx];
+            float bEnv = Mathf.Clamp01(bTime / 0.015f) * Mathf.Exp(-bTime * 1.15f);
+            float cello = (Mathf.Sin(2f * Mathf.PI * bFreq * t) * 0.52f
+                        + Mathf.Sin(2f * Mathf.PI * bFreq * 2f * t) * 0.28f
+                        + Mathf.Sin(2f * Mathf.PI * bFreq * 3f * t) * 0.12f) * bEnv;
 
-            float pianoT = t - Mathf.Floor(t);
-            float pianoEnv = Mathf.Exp(-pianoT * 4.5f);
-            float arpegF = bassF * 2f * (1f + (Mathf.Floor(pianoT * 4f) * 0.25f));
-            float piano = Mathf.Sin(2f * Mathf.PI * arpegF * t) * pianoEnv * 0.20f;
+            int mIdx = Mathf.Clamp(Mathf.FloorToInt(t / noteDur), 0, melodyNotes.Length - 1);
+            float mTime = t - mIdx * noteDur;
+            float mFreq = melodyNotes[mIdx];
+            float mEnv = Mathf.Clamp01(mTime / 0.008f) * Mathf.Exp(-mTime * 2.85f);
+            float piano = (Mathf.Sin(2f * Mathf.PI * mFreq * t) * 0.55f
+                         + Mathf.Sin(2f * Mathf.PI * mFreq * 2f * t) * 0.26f
+                         + Mathf.Sin(2f * Mathf.PI * mFreq * 3f * t) * 0.10f) * mEnv;
 
-            float mix = (cello * 0.32f) + (musicBox * 0.38f) + piano;
+            float harpTime = t - Mathf.Floor(t * 2f) * 0.5f;
+            float harpEnv = Mathf.Clamp01(harpTime / 0.006f) * Mathf.Exp(-harpTime * 4.2f);
+            float arpegFreq = bFreq * 2f * (1f + (Mathf.Floor(harpTime * 8f) * 0.25f));
+            float harp = Mathf.Sin(2f * Mathf.PI * arpegFreq * t) * harpEnv * 0.16f;
+
+            float mix = cello * 0.36f + piano * 0.42f + harp;
             data[i] = Mathf.Clamp(mix, -0.92f, 0.92f);
         }
 
@@ -813,13 +885,29 @@ public class LuaBootstrapper : MonoBehaviour
         int sr = 44100;
         int len = Mathf.FloorToInt(sr * 1.5f);
         float[] data = new float[len];
+        System.Random rnd = new System.Random(303);
+        float embers = 0f;
+        float crackleDecay = 0f;
+        float crackleFreq = 800f;
         for (int i = 0; i < len; i++)
         {
             float t = i / (float)sr;
-            float rumble = Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.2f + Mathf.Sin(2f * Mathf.PI * 110f * t) * 0.1f;
-            float crackle = (Random.value > 0.992f) ? (Random.value * 2f - 1f) * 0.65f : 0f;
-            float noise = (Random.value * 2f - 1f) * 0.08f;
-            data[i] = Mathf.Clamp(rumble + crackle + noise, -1f, 1f) * 0.5f;
+            float rumble = Mathf.Sin(2f * Mathf.PI * 45f * t) * 0.16f + Mathf.Sin(2f * Mathf.PI * 90f * t) * 0.10f;
+            float white = (float)(rnd.NextDouble() * 2.0 - 1.0);
+            embers = Mathf.Lerp(embers, white, 0.05f);
+            if (rnd.NextDouble() < 0.0018)
+            {
+                crackleDecay = 1.0f;
+                crackleFreq = 650f + (float)rnd.NextDouble() * 850f;
+            }
+            float pop = 0f;
+            if (crackleDecay > 0.001f)
+            {
+                pop = Mathf.Sin(2f * Mathf.PI * crackleFreq * t) * crackleDecay * 0.35f;
+                crackleDecay *= 0.965f;
+            }
+            float loopFade = Mathf.Sin(Mathf.PI * (i / (float)len));
+            data[i] = Mathf.Clamp((rumble + embers * 0.28f + pop) * Mathf.Lerp(0.85f, 1f, loopFade), -0.95f, 0.95f) * 0.45f;
         }
         AudioClip c = AudioClip.Create("ProcHearthFire", len, 1, sr, false);
         c.SetData(data, 0);
