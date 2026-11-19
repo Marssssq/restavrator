@@ -2001,7 +2001,10 @@ public class LuaBootstrapper : MonoBehaviour
     private void HighlightList(List<Image> list, int activeIdx, Color activeCol)
     {
         for (int i = 0; i < list.Count; i++)
+        {
             list[i].color = (i == activeIdx) ? activeCol : new Color(0.28f, 0.23f, 0.19f, 1f);
+            list[i].transform.localScale = (i == activeIdx) ? new Vector3(1.025f, 1.025f, 1f) : Vector3.one;
+        }
     }
 
     // =========================================================================
