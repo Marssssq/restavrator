@@ -119,6 +119,7 @@ public class LuaBootstrapper : MonoBehaviour
     private RectTransform roomAreaRT, playerRT, clickMarkerRT;
     private Text playerBubbleText, topTitleText, topStatsText, bottomHintText;
     private Image windowBadgeImg, benchBadgeImg, cabinetBadgeImg, benchItemPreviewImg;
+    private Image winGlowImg, benchGlowImg, cabGlowImg;
     private float markerAlpha = 0f;
 
     private GameObject windowOverlay, workbenchOverlay, cabinetOverlay, upgradesOverlay, modalOverlay;
@@ -1698,6 +1699,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject winGlow = CreatePanel(roomAreaRT, "WinLampGlow", new Color(1f, 0.86f, 0.55f, 0.30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-440, -15), new Vector2(380, 380), spSoftLightGlow);
         winGlow.GetComponent<Image>().raycastTarget = false;
+        winGlowImg = winGlow.GetComponent<Image>();
 
         GameObject winStation = CreatePanel(roomAreaRT, "Station_Window", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-485, -15), new Vector2(220, 265), spStationWindow, false, true);
         AddStationClickTrigger(winStation, posWindowInteract, "WINDOW");
@@ -1709,6 +1711,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject benchGlow = CreatePanel(roomAreaRT, "BenchLampGlow", new Color(1f, 0.90f, 0.60f, 0.36f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 175), new Vector2(490, 360), spSoftLightGlow);
         benchGlow.GetComponent<Image>().raycastTarget = false;
+        benchGlowImg = benchGlow.GetComponent<Image>();
 
         GameObject benchStation = CreatePanel(roomAreaRT, "Station_Workbench", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 195), new Vector2(350, 158), spStationWorkbench, false, true);
         AddStationClickTrigger(benchStation, posBenchInteract, "WORKBENCH");
@@ -1724,6 +1727,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject cabGlow = CreatePanel(roomAreaRT, "CabLampGlow", new Color(0.75f, 0.92f, 1f, 0.25f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(375, 175), new Vector2(370, 310), spSoftLightGlow);
         cabGlow.GetComponent<Image>().raycastTarget = false;
+        cabGlowImg = cabGlow.GetComponent<Image>();
 
         GameObject cabStation = CreatePanel(roomAreaRT, "Station_Cabinet", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(375, 195), new Vector2(300, 158), spStationCabinet, false, true);
         AddStationClickTrigger(cabStation, posCabinetInteract, "CABINET");
@@ -2810,6 +2814,30 @@ public class LuaBootstrapper : MonoBehaviour
         benchBadgeImg.gameObject.SetActive(orderStage == "NEED_DIAGNOSIS" || orderStage == "READY_TO_RESTORE");
         cabinetBadgeImg.gameObject.SetActive(orderStage == "NEED_TOOLS");
 
+        if (winGlowImg != null && benchGlowImg != null)
+        {
+            if (completedOrdersCount == 0)
+            {
+                winGlowImg.color = new Color(0.85f, 0.95f, 1f, 0.36f);
+                benchGlowImg.color = new Color(1f, 0.92f, 0.70f, 0.28f);
+            }
+            else if (completedOrdersCount == 1)
+            {
+                winGlowImg.color = new Color(1f, 0.98f, 0.80f, 0.42f);
+                benchGlowImg.color = new Color(1f, 0.90f, 0.65f, 0.32f);
+            }
+            else if (completedOrdersCount == 2)
+            {
+                winGlowImg.color = new Color(1f, 0.60f, 0.30f, 0.46f);
+                benchGlowImg.color = new Color(1f, 0.82f, 0.48f, 0.38f);
+            }
+            else
+            {
+                winGlowImg.color = new Color(0.24f, 0.35f, 0.65f, 0.38f);
+                benchGlowImg.color = new Color(1f, 0.75f, 0.32f, 0.48f);
+            }
+        }
+
         if (orderStage == "NONE")
         {
             playerBubbleText.text = "Выбрать заказ в Окне заказов";
@@ -2841,7 +2869,8 @@ public class LuaBootstrapper : MonoBehaviour
     {
         string rankStr = qualificationRank == 1 ? "I разряд" : (qualificationRank == 2 ? "II разряд" : "III разряд (Гранд)");
         string ordName = (activeOrder != null) ? activeOrder.title : "Свободен";
-        topTitleText.text = $"Заказов: {completedOrdersCount}/{TOTAL_ORDERS_TO_WIN}  |  Квалификация: {rankStr}  |  {ordName}";
+        string timeOfDay = completedOrdersCount == 0 ? "Утро" : (completedOrdersCount == 1 ? "День" : (completedOrdersCount == 2 ? "Закат" : "Вечер"));
+        topTitleText.text = $"Смена ({timeOfDay}) • Заказов: {completedOrdersCount}/{TOTAL_ORDERS_TO_WIN} • {rankStr} • {ordName}";
         topStatsText.text = $"Касса: {money} руб.   |   Доверие: {trust}%   |   Износ: {Mathf.FloorToInt(overScrubDamage)}%";
     }
 
@@ -3257,7 +3286,9 @@ public class LuaBootstrapper : MonoBehaviour
         }
         else
         {
-            PlaySFX(clipCoin, 0.8f, 1.0f);
+            PlaySFX(clipCoin, 0.9f, 1.05f);
+            EmitSparks(Vector2.zero, 18, new Color(1f, 0.90f, 0.40f, 1f));
+            SpawnFloatingText(new Vector2(0, 40), $"+{pay} руб. в кассу!", new Color(1f, 0.88f, 0.35f, 1f));
         }
 
         money += pay;
@@ -3297,6 +3328,9 @@ public class LuaBootstrapper : MonoBehaviour
     private void ShowShiftFinale()
     {
         SetViewState("FINALE");
+        PlaySFX(clipBell, 0.9f, 1.1f);
+        EmitSparks(Vector2.zero, 28, new Color(1f, 0.92f, 0.45f, 1f));
+        SpawnFloatingText(new Vector2(0, 60), "★ ДИПЛОМ ГИЛЬДИИ ВРУЧЕН!", new Color(1f, 0.95f, 0.50f, 1f));
         modalSealGO.SetActive(true);
         modalSealGO.GetComponent<Image>().color = secretViolated ? new Color(0.65f, 0.35f, 0.35f, 1f) : new Color(0.95f, 0.78f, 0.25f, 1f);
         modalSealText.text = secretViolated ? "АРХИВ" : (qualificationRank >= 3 ? "ГРАНД" : "МАСТЕР");
