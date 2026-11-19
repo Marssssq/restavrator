@@ -2630,16 +2630,17 @@ public class LuaBootstrapper : MonoBehaviour
         }
         else if (idx == 2 && qualificationRank < 2)
         {
-            if (money >= 1600) { money -= 1600; qualificationRank = 2; PlaySFX(clipCoin); bottomHintText.text = "Поздравляем! Вы получили II разряд — теперь в Окне заказов доступны элитные реликвии!"; }
+            if (money >= 1600) { money -= 1600; qualificationRank = 2; PlaySFX(clipCoin); PlaySFX(clipBell, 0.75f, 1.15f); bottomHintText.text = "Поздравляем! Вы получили II разряд — теперь в Окне заказов доступны элитные реликвии!"; }
             else { PlaySFX(clipFail); bottomHintText.text = "Недостаточно денег для сертификации II разряда (нужно 1600 руб.)!"; }
         }
         else if (idx == 3 && qualificationRank < 3)
         {
             if (qualificationRank < 2) { PlaySFX(clipFail); bottomHintText.text = "Сначала получите Сертификат II разряда!"; return; }
-            if (money >= 3000) { money -= 3000; qualificationRank = 3; trust = Mathf.Min(100, trust + 20); PlaySFX(clipCoin); bottomHintText.text = "Вы стали Гранд-мастером III разряда! Гонорары за все заказы увеличены на +35%!"; }
+            if (money >= 3000) { money -= 3000; qualificationRank = 3; trust = Mathf.Min(100, trust + 20); PlaySFX(clipCoin); PlaySFX(clipBell, 0.85f, 1.35f); bottomHintText.text = "Вы стали Гранд-мастером III разряда! Гонорары за все заказы увеличены на +35%!"; }
             else { PlaySFX(clipFail); bottomHintText.text = "Недостаточно денег для патента III разряда (нужно 3000 руб.)!"; }
         }
         RefreshUpgradesUI();
+        UpdateRoomIndicators();
     }
 
     private void PopulateWindowCardsUI()
