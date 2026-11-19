@@ -234,6 +234,8 @@ public class LuaBootstrapper : MonoBehaviour
     private Sprite spBeveledPanel, spBeveledButton, spWaxSealBadge, spSoftLightGlow, spLoupeLens, spTargetClamp, spTimerRing;
     private Sprite spStationWindow, spStationWorkbench, spStationCabinet, spStationMasterStand, spArtisanChar, spWorkshopCat;
     private Sprite spClockDial, spHourHand, spMinuteHand, spFireplace, spFlameTongue, spCandleStick, spCatTail, spCatEarLeft, spCatEarRight;
+    private Sprite spVictorianWall, spGodRays, spRoomVignette, spWorkbenchMat;
+    private Image sunlightGodRaysImg, roomVignetteImg;
     private RectTransform catRT;
     public static LuaBootstrapper Instance { get; private set; }
 
@@ -868,6 +870,176 @@ public class LuaBootstrapper : MonoBehaviour
         spCatTail            = CreateCatTailSprite(36, 48);
         spCatEarLeft         = CreateCatEarSprite(18, 22, true);
         spCatEarRight        = CreateCatEarSprite(18, 22, false);
+        spVictorianWall      = CreateVictorianWallSprite(128, 128);
+        spGodRays            = CreateGodRaySprite(256, 160);
+        spRoomVignette       = CreateRoomVignetteSprite(128, 128);
+        spWorkbenchMat       = CreateWorkbenchMatSprite(128, 128);
+    }
+
+    private Sprite CreateVictorianWallSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        Vector3 lightDir = new Vector3(-0.35f, 0.65f, 0.75f).normalized;
+        Color wallBase = new Color(0.18f, 0.08f, 0.10f, 1f);
+        Color damaskGold = new Color(0.38f, 0.22f, 0.14f, 1f);
+        Color woodBase = new Color(0.24f, 0.13f, 0.08f, 1f);
+        Color brassRail = new Color(0.85f, 0.70f, 0.32f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                Color albedo;
+                Vector3 norm = new Vector3(0f, 0f, 1f);
+                float met = 0.05f;
+                float smooth = 0.30f;
+
+                if (y > 54)
+                {
+                    float px = Mathf.Abs(((x % 32) - 16f) / 16f);
+                    float py = Mathf.Abs(((y % 32) - 16f) / 16f);
+                    float damask = Mathf.Cos(px * Mathf.PI) * Mathf.Cos(py * Mathf.PI);
+                    float damaskPattern = Mathf.Clamp01(damask * damask);
+                    albedo = Color.Lerp(wallBase, damaskGold, damaskPattern * 0.65f);
+                    norm = new Vector3(Mathf.Sin(x * 0.2f) * damaskPattern * 0.2f, Mathf.Cos(y * 0.2f) * damaskPattern * 0.2f, 0.95f).normalized;
+                    met = damaskPattern * 0.35f;
+                    smooth = 0.40f;
+                }
+                else if (y >= 48)
+                {
+                    float rPos = (y - 48f) / 6f;
+                    albedo = (rPos > 0.4f && rPos < 0.8f) ? brassRail : woodBase * 0.8f;
+                    norm = new Vector3(0f, (rPos - 0.5f) * 1.5f, 0.7f).normalized;
+                    met = (rPos > 0.4f && rPos < 0.8f) ? 0.85f : 0.25f;
+                    smooth = 0.80f;
+                }
+                else
+                {
+                    float pX = x % 32f;
+                    float beveled = Mathf.Min(pX, 32f - pX);
+                    float woodGrain = Mathf.Sin(x * 0.3f + Mathf.Cos(y * 0.15f) * 2f) * 0.025f;
+                    albedo = woodBase + new Color(woodGrain, woodGrain * 0.7f, woodGrain * 0.4f, 0f);
+                    if (beveled < 3f)
+                    {
+                        albedo *= 0.65f;
+                        norm = new Vector3((pX < 16f ? -0.6f : 0.6f), 0f, 0.8f).normalized;
+                    }
+                    else if (y < 8)
+                    {
+                        albedo *= 0.75f;
+                        norm = new Vector3(0f, -0.5f, 0.85f).normalized;
+                    }
+                    else
+                    {
+                        norm = new Vector3(0f, 0f, 1f);
+                    }
+                    met = 0.15f;
+                    smooth = 0.55f;
+                }
+
+                cols[y * w + x] = EvaluatePBRPixel(albedo, norm, met, smooth, lightDir);
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+    }
+
+    private Sprite CreateGodRaySprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float dx = x - 12f;
+                float expectedY = (h - 16f) - (dx / (w - 24f)) * (h - 32f);
+                float dist = Mathf.Abs(y - expectedY);
+                float beam = Mathf.Exp(-dist * dist / (38f * 38f));
+                float streaks = 0.82f + Mathf.Sin(x * 0.09f + y * 0.05f) * 0.18f;
+                float distFade = Mathf.Clamp01(1.1f - (x / (float)w) * 0.75f);
+                float alpha = Mathf.Clamp01(beam * streaks * distFade);
+
+                Color rayCol = new Color(1f, 0.96f, 0.82f, alpha);
+                cols[y * w + x] = rayCol;
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+    }
+
+    private Sprite CreateRoomVignetteSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        float cx = w * 0.5f;
+        float cy = h * 0.5f;
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float nx = (x - cx) / cx;
+                float ny = (y - cy) / cy;
+                float d = Mathf.Sqrt(nx * nx + ny * ny);
+                float vig = Mathf.Clamp01((d - 0.55f) / 0.65f);
+                vig = vig * vig;
+                cols[y * w + x] = new Color(0.04f, 0.02f, 0.01f, vig * 0.72f);
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+    }
+
+    private Sprite CreateWorkbenchMatSprite(int w, int h)
+    {
+        Texture2D tex = CreateTrackedTexture(w, h);
+        Color32[] cols = new Color32[w * h];
+        Vector3 lightDir = new Vector3(-0.35f, 0.65f, 0.75f).normalized;
+        Color velvetCol = new Color(0.08f, 0.22f, 0.14f, 1f);
+        Color goldTrim = new Color(0.92f, 0.75f, 0.32f, 1f);
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int bDist = Mathf.Min(Mathf.Min(x, w - 1 - x), Mathf.Min(y, h - 1 - y));
+                float plush = Mathf.Sin(x * 1.5f) * Mathf.Cos(y * 1.5f) * 0.03f;
+                Color albedo = velvetCol + new Color(plush, plush * 1.2f, plush * 0.8f, 0f);
+                Vector3 norm = new Vector3(plush * 1.5f, plush * 1.5f, 1f).normalized;
+                float met = 0.05f;
+                float smooth = 0.35f;
+
+                if (bDist >= 6 && bDist <= 10)
+                {
+                    float leafPattern = Mathf.Sin((x + y) * 0.45f);
+                    if (leafPattern > 0.1f)
+                    {
+                        albedo = goldTrim;
+                        met = 0.90f;
+                        smooth = 0.85f;
+                        norm = new Vector3(leafPattern * 0.3f, leafPattern * 0.3f, 0.9f).normalized;
+                    }
+                }
+                else if (bDist < 5)
+                {
+                    albedo = new Color(0.12f, 0.08f, 0.05f, 1f);
+                    norm = (bDist < 2) ? new Vector3((x < w / 2 ? -0.7f : 0.7f), (y < h / 2 ? -0.7f : 0.7f), 0.5f).normalized : new Vector3(0f, 0f, 1f);
+                    met = 0.2f;
+                    smooth = 0.6f;
+                }
+
+                cols[y * w + x] = EvaluatePBRPixel(albedo, norm, met, smooth, lightDir);
+            }
+        }
+        tex.SetPixels32(cols);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
     private Sprite CreateVictorianClockDialSprite(int size)
@@ -2418,13 +2590,21 @@ public class LuaBootstrapper : MonoBehaviour
         GameObject rug = CreatePanel(roomAreaRT, "WorkshopRug", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-10, -45), new Vector2(540, 260), rugSprite, false, true);
         rug.GetComponent<Image>().raycastTarget = false;
 
-        GameObject topWall = CreatePanel(roomAreaRT, "TopWall", new Color(0.15f, 0.12f, 0.10f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 128), null, false, true);
+        GameObject topWall = CreatePanel(roomAreaRT, "TopWall", Color.white, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 128), spVictorianWall, true, true);
         topWall.GetComponent<Image>().raycastTarget = false;
         GameObject trimTop = CreatePanel(topWall.transform, "WoodTrim", new Color(0.52f, 0.34f, 0.18f, 1f), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 4), new Vector2(0, 8));
         trimTop.GetComponent<Image>().raycastTarget = false;
 
-        GameObject leftWall = CreatePanel(roomAreaRT, "LeftWall", new Color(0.15f, 0.12f, 0.10f, 1f), new Vector2(0, 0), new Vector2(0, 1), new Vector2(72, 0), new Vector2(144, 0), null, false, true);
+        GameObject leftWall = CreatePanel(roomAreaRT, "LeftWall", Color.white, new Vector2(0, 0), new Vector2(0, 1), new Vector2(72, 0), new Vector2(144, 0), spVictorianWall, true, true);
         leftWall.GetComponent<Image>().raycastTarget = false;
+
+        GameObject godRaysGO = CreatePanel(roomAreaRT, "SunlightGodRays", new Color(1f, 0.95f, 0.75f, 0.20f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-210f, -40f), new Vector2(580f, 320f), spGodRays);
+        godRaysGO.GetComponent<Image>().raycastTarget = false;
+        sunlightGodRaysImg = godRaysGO.GetComponent<Image>();
+
+        GameObject vigGO = CreatePanel(roomAreaRT, "RoomVignetteOverlay", new Color(0.04f, 0.02f, 0.01f, 0.55f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, spRoomVignette);
+        vigGO.GetComponent<Image>().raycastTarget = false;
+        roomVignetteImg = vigGO.GetComponent<Image>();
 
         GameObject winGlow = CreatePanel(roomAreaRT, "WinLampGlow", new Color(1f, 0.86f, 0.55f, 0.30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-440, -15), new Vector2(380, 380), spSoftLightGlow);
         winGlow.GetComponent<Image>().raycastTarget = false;
@@ -3018,7 +3198,9 @@ public class LuaBootstrapper : MonoBehaviour
         benchLogText = CreateText(leftLog.transform, "LogTxt", "", 14, new Color(0.94f, 0.90f, 0.82f, 1f), new Vector2(0, 0.30f), new Vector2(1, 1), new Vector2(0, -12), new Vector2(-26, -20), TextAnchor.UpperLeft);
         benchProgressText = CreateText(leftLog.transform, "ProgTxt", "", 14, new Color(0.76f, 0.96f, 0.80f, 1f), new Vector2(0, 0), new Vector2(1, 0.30f), new Vector2(0, 14), new Vector2(-26, -12), TextAnchor.LowerLeft, true);
 
-        GameObject centerMat = CreatePanel(workbenchOverlay.transform, "CenterMat", new Color(0.15f, 0.34f, 0.22f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 24), new Vector2(394, 394), spBeveledPanel, true, true);
+        GameObject centerMat = CreatePanel(workbenchOverlay.transform, "CenterMat", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 24), new Vector2(394, 394), spWorkbenchMat, true, true);
+        GameObject deskLampGlow = CreatePanel(centerMat.transform, "DeskLampGlow", new Color(1f, 0.94f, 0.72f, 0.24f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 20), new Vector2(380, 380), spSoftLightGlow);
+        deskLampGlow.GetComponent<Image>().raycastTarget = false;
         Button zoomOutBtn = CreateButton(centerMat.transform, "ZoomOutBtn", "−", new Vector2(72, 172), new Vector2(28, 28), new Color(0.24f, 0.36f, 0.30f, 1f), () => {
             StepBenchZoom(-0.25f);
         }, out Text zoTxt, out _);
@@ -3373,7 +3555,11 @@ public class LuaBootstrapper : MonoBehaviour
     {
         foreach (var node in activeClickNodes)
         {
-            if (node.uiRT != null) Destroy(node.uiRT.gameObject);
+            if (node.uiRT != null)
+            {
+                if (Application.isPlaying) Destroy(node.uiRT.gameObject);
+                else DestroyImmediate(node.uiRT.gameObject);
+            }
         }
         activeClickNodes.Clear();
 
@@ -3576,9 +3762,11 @@ public class LuaBootstrapper : MonoBehaviour
                         isItem = true;
                         float midR = 55f;
                         float tubePos = (dist - midR) / 14f;
-                        norm = new Vector3((dx / dist) * tubePos, (dy / dist) * tubePos, Mathf.Sqrt(Mathf.Max(0.15f, 1f - tubePos * tubePos)));
-                        albedo = new Color(0.95f, 0.78f, 0.30f, 1f);
-                        metallic = 0.94f;
+                        float leafPattern = Mathf.Sin(ang * 16f) * Mathf.Cos(tubePos * 2.8f) * 0.22f;
+                        Vector3 baseNorm = new Vector3((dx / dist) * tubePos, (dy / dist) * tubePos, Mathf.Sqrt(Mathf.Max(0.15f, 1f - tubePos * tubePos)));
+                        norm = (baseNorm + new Vector3(Mathf.Cos(ang) * leafPattern, Mathf.Sin(ang) * leafPattern, 0.3f) * 0.35f).normalized;
+                        albedo = new Color(0.96f, 0.80f, 0.32f, 1f);
+                        metallic = 0.95f;
 
                         if (Mathf.Abs(dist - 55f) < 9.5f && Mathf.Sin(ang * 5f) > 0.35f)
                             isBurrZone = true;
@@ -3726,7 +3914,12 @@ public class LuaBootstrapper : MonoBehaviour
                     if (selectedStyle == "NEW")
                     {
                         smoothness = Mathf.Lerp(0.72f, 0.96f, fRatio);
-                        albedo *= (1f + 0.12f * fRatio);
+                        albedo *= (1f + 0.14f * fRatio);
+                        if (fRatio > 0.85f)
+                        {
+                            float glintStar = Mathf.Sin(x * 0.35f + y * 0.35f + Time.time * 5f);
+                            if (glintStar > 0.96f) albedo += new Color(0.35f, 0.30f, 0.20f, 0f);
+                        }
                     }
                     else if (selectedStyle == "PATINA")
                     {
@@ -3838,6 +4031,8 @@ public class LuaBootstrapper : MonoBehaviour
         cabinetOverlay.SetActive(newState == "CABINET");
         upgradesOverlay.SetActive(newState == "UPGRADES");
         modalOverlay.SetActive(newState == "TWIST" || newState == "RESULT" || newState == "FINALE" || newState == "CERTIFICATE");
+        if (sunlightGodRaysImg != null) sunlightGodRaysImg.gameObject.SetActive(newState == "ROOM");
+        if (roomVignetteImg != null) roomVignetteImg.gameObject.SetActive(newState == "ROOM");
 
         if (newState != "WORKBENCH")
         {
@@ -4931,6 +5126,16 @@ public class LuaBootstrapper : MonoBehaviour
                                                  new Color(0.12f, 0.18f, 0.40f, 0.26f);
                     ambientTintImg.color = Color.Lerp(t0, t1, prog);
                 }
+            }
+            if (sunlightGodRaysImg != null && sunlightGodRaysImg.gameObject.activeSelf)
+            {
+                float pulse = Mathf.Sin(Time.time * 1.4f) * 0.5f + 0.5f;
+                Color rayCol;
+                if (phaseIdx == 0) rayCol = new Color(0.96f, 0.90f, 0.72f, 0.16f + 0.04f * pulse);
+                else if (phaseIdx == 1) rayCol = new Color(1f, 0.98f, 0.82f, 0.24f + 0.05f * pulse);
+                else if (phaseIdx == 2) rayCol = new Color(1f, 0.56f, 0.26f, 0.26f + 0.05f * pulse);
+                else rayCol = new Color(0.62f, 0.78f, 1.0f, 0.15f + 0.04f * pulse);
+                sunlightGodRaysImg.color = rayCol;
             }
         }
         if (clockWidgetRT != null) clockWidgetRT.localScale = Vector3.Lerp(clockWidgetRT.localScale, Vector3.one, dt * 8f);
