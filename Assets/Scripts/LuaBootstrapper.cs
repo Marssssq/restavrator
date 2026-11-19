@@ -58,7 +58,7 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
     private AudioSource musicSource;
-    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch, clipPurr, clipHearthFire;
+    private AudioClip clipBell, clipStep, clipClickPin, clipSpringReset, clipGrindLoop, clipCleanLoop, clipCoin, clipFail, clipClockTick, clipCrystalChime, clipToolSwitch, clipPurr, clipHearthFire, clipSecret;
     private AudioClip clipClassicalTheme;
     private bool isMuted = false;
     private Text muteBtnText;
@@ -349,6 +349,7 @@ public class LuaBootstrapper : MonoBehaviour
         clipCrystalChime = LoadOrSynthesize("Audio/chime", SynthesizeCrystalChimeClip);
         clipToolSwitch  = LoadOrSynthesize("Audio/switch", SynthesizeToolSwitchClip);
         clipPurr        = LoadOrSynthesize("Audio/purr",   SynthesizePurrClip);
+        clipSecret      = LoadOrSynthesize("Audio/secret", SynthesizeSecretClip);
         clipHearthFire  = LoadOrSynthesize("Audio/hearth", SynthesizeHearthFireClip);
 
         clipClassicalTheme = LoadOrSynthesize("Audio/classical_theme", SynthesizeClassicalTheme);
@@ -363,6 +364,23 @@ public class LuaBootstrapper : MonoBehaviour
             ambientSource.clip = clipClockTick;
             ambientSource.Play();
         }
+    }
+
+    private AudioClip SynthesizeSecretClip()
+    {
+        int sampleRate = 44100;
+        int samples = Mathf.RoundToInt(sampleRate * 0.9f);
+        float[] data = new float[samples];
+        for (int i = 0; i < samples; i++)
+        {
+            float t = i / (float)sampleRate;
+            float snap = (t < 0.05f) ? Mathf.Sin(2f * Mathf.PI * 1850f * t) * Mathf.Exp(-90f * t) : 0f;
+            float chime = Mathf.Sin(2f * Mathf.PI * 880f * t) * Mathf.Exp(-4.5f * t) * 0.65f + Mathf.Sin(2f * Mathf.PI * 1320f * t) * Mathf.Exp(-6f * t) * 0.35f;
+            data[i] = Mathf.Clamp(snap * 0.75f + chime * 0.65f, -1f, 1f);
+        }
+        AudioClip clip = AudioClip.Create("SynthesizedSecret", samples, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
     }
 
     private AudioClip LoadWavFromFile(string filePath, string clipName)
@@ -4394,6 +4412,7 @@ public class LuaBootstrapper : MonoBehaviour
 
     private void TriggerMidOrderTwist()
     {
+        PlaySFX(clipSecret, 0.90f, 1.0f);
         SetViewState("TWIST");
         modalSealGO.SetActive(false);
         modalTitle.text = "СМЕНА УСЛОВИЙ В МАСТЕРСКОЙ!";
