@@ -3083,6 +3083,15 @@ public class LuaBootstrapper : MonoBehaviour
         UpdateClickNodesDecay(dt);
         UpdateDustMotes(dt);
 
+        if (Input.GetMouseButtonDown(1))
+        {
+            if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
+            {
+                PlaySFX(clipClickPin, 0.4f, 0.9f);
+                SetViewState("ROOM");
+            }
+        }
+
         if (viewState == "ROOM")
         {
             if (Input.GetMouseButtonDown(0))
