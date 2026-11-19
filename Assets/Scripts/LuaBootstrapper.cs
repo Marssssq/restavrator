@@ -45,6 +45,9 @@ public class LuaBootstrapper : MonoBehaviour
     private Vector2 currentLightPos = new Vector2(-60f, 80f);
     private bool hasLastMouse = false;
     private bool twistChecked = false;
+    private float barsikBuffTimer = 0f;
+    private GameObject barsikBuffRoot;
+    private Text barsikBuffText;
 
     private List<string> historyLog = new List<string>();
     private List<string> completedOrderTypes = new List<string>();
@@ -360,10 +363,104 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
+    private AudioClip LoadWavFromFile(string filePath, string clipName)
+    {
+        if (!System.IO.File.Exists(filePath)) return null;
+        try
+        {
+            byte[] bytes = System.IO.File.ReadAllBytes(filePath);
+            if (bytes.Length < 44) return null;
+            if (bytes[0] != 'R' || bytes[1] != 'I' || bytes[2] != 'F' || bytes[3] != 'F') return null;
+            if (bytes[8] != 'W' || bytes[9] != 'A' || bytes[10] != 'V' || bytes[11] != 'E') return null;
+
+            int channels = 1;
+            int sampleRate = 44100;
+            int bitsPerSample = 16;
+            int pos = 12;
+
+            while (pos + 8 <= bytes.Length)
+            {
+                string chunkId = System.Text.Encoding.ASCII.GetString(bytes, pos, 4);
+                int chunkSize = System.BitConverter.ToInt32(bytes, pos + 4);
+                pos += 8;
+
+                if (chunkId == "fmt ")
+                {
+                    channels = System.BitConverter.ToInt16(bytes, pos + 2);
+                    sampleRate = System.BitConverter.ToInt32(bytes, pos + 4);
+                    bitsPerSample = System.BitConverter.ToInt16(bytes, pos + 14);
+                    pos += chunkSize;
+                }
+                else if (chunkId == "data")
+                {
+                    int bytesPerSample = bitsPerSample / 8;
+                    if (bytesPerSample <= 0 || channels <= 0) return null;
+                    int sampleCount = chunkSize / bytesPerSample;
+                    int totalFrames = sampleCount / channels;
+                    float[] samples = new float[sampleCount];
+
+                    if (bitsPerSample == 16)
+                    {
+                        for (int i = 0; i < sampleCount && pos + i * 2 + 1 < bytes.Length; i++)
+                        {
+                            short s = System.BitConverter.ToInt16(bytes, pos + i * 2);
+                            samples[i] = s / 32768f;
+                        }
+                    }
+                    else if (bitsPerSample == 8)
+                    {
+                        for (int i = 0; i < sampleCount && pos + i < bytes.Length; i++)
+                        {
+                            samples[i] = (bytes[pos + i] - 128) / 128f;
+                        }
+                    }
+                    else
+                    {
+                        return null;
+                    }
+
+                    AudioClip clip = AudioClip.Create(clipName, totalFrames, channels, sampleRate, false);
+                    clip.SetData(samples, 0);
+                    return clip;
+                }
+                else
+                {
+                    pos += chunkSize;
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+        return null;
+    }
+
     private AudioClip LoadOrSynthesize(string path, System.Func<AudioClip> synthFunc)
     {
         AudioClip loaded = Resources.Load<AudioClip>(path);
         if (loaded != null) return loaded;
+
+        string fileName = System.IO.Path.GetFileName(path);
+        string[] searchPaths = new string[] {
+            System.IO.Path.Combine(Application.dataPath, "Resources", "Audio", fileName + ".wav"),
+            System.IO.Path.Combine(Application.dataPath, "..", "Audio", fileName + ".wav"),
+            System.IO.Path.Combine(Application.dataPath, "Audio", fileName + ".wav"),
+            System.IO.Path.Combine(Application.streamingAssetsPath, "Audio", fileName + ".wav")
+        };
+        for (int i = 0; i < searchPaths.Length; i++)
+        {
+            if (System.IO.File.Exists(searchPaths[i]))
+            {
+                AudioClip custom = LoadWavFromFile(searchPaths[i], fileName);
+                if (custom != null)
+                {
+                    createdClips.Add(custom);
+                    return custom;
+                }
+            }
+        }
+
         AudioClip synthesized = synthFunc();
         if (synthesized != null) createdClips.Add(synthesized);
         return synthesized;
@@ -2469,8 +2566,11 @@ public class LuaBootstrapper : MonoBehaviour
                 catRT.localScale = new Vector3(1.18f, 0.88f, 1f);
                 EmitSparks(new Vector2(-235, -180), 8, new Color(1f, 0.88f, 0.60f, 1f));
                 overScrubDamage = Mathf.Max(0f, overScrubDamage - 3f);
-                SpawnFloatingText(new Vector2(-235, -145), "Мурр... Спокойствие рук +10%", new Color(1f, 0.90f, 0.65f, 1f));
-                bottomHintText.text = "Кот Барсик уютно замурчал. Рука мастера спокойна, дыхание ровное!";
+                barsikBuffTimer = 60f;
+                if (barsikBuffRoot != null) barsikBuffRoot.SetActive(true);
+                if (barsikBuffText != null) barsikBuffText.text = "🐾 Барсик: 01:00";
+                SpawnFloatingText(new Vector2(-235, -145), "Мурр... Спокойствие рук (60 сек)", new Color(1f, 0.90f, 0.65f, 1f));
+                bottomHintText.text = "Кот Барсик уютно замурчал. Рука мастера спокойна: риск перетирания снижен на 50% (таймер 60 сек)!";
                 UpdateTopBar();
             }
         });
@@ -2541,6 +2641,17 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject pivotCap = CreatePanel(dialGO.transform, "PivotCap", new Color(0.96f, 0.82f, 0.32f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(5f, 5f), spSoftLightGlow);
         pivotCap.GetComponent<Image>().raycastTarget = false;
+
+        barsikBuffRoot = CreatePanel(topBar.transform, "BarsikBuffRoot", new Color(0.20f, 0.15f, 0.11f, 0.95f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(145f, 0f), new Vector2(150f, 38f), spBeveledButton, true, true);
+        barsikBuffText = CreateText(barsikBuffRoot.transform, "BuffTxt", "🐾 Барсик: 00:00", 12, new Color(1f, 0.92f, 0.65f, 1f), Vector2.zero, Vector2.one, new Vector2(8f, 0f), new Vector2(-8f, 0f), TextAnchor.MiddleCenter, true);
+        Button buffBtn = barsikBuffRoot.AddComponent<Button>();
+        buffBtn.onClick.AddListener(() => {
+            PlaySFX(clipPurr, 0.8f, 1.1f);
+            if (bottomHintText != null)
+                bottomHintText.text = $"Эффект Барсика: Спокойствие мастера активно еще {Mathf.CeilToInt(barsikBuffTimer)} сек (-50% риск перетирания).";
+        });
+        TooltipTrigger.Attach(barsikBuffRoot, "BARSIK_BUFF_TOOLTIP");
+        barsikBuffRoot.SetActive(false);
 
         clockPhaseText = CreateText(clockRoot.transform, "PhaseTitle", "УТРО", 13, new Color(1f, 0.90f, 0.62f, 1f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(42f, 9f), new Vector2(-50f, 18f), TextAnchor.MiddleLeft, true);
         clockDigitalText = CreateText(clockRoot.transform, "DigitalClock", "00:00 / 12:00", 10, new Color(0.85f, 0.82f, 0.75f, 0.85f), new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(42f, -8f), new Vector2(-50f, 16f), TextAnchor.MiddleLeft);
@@ -2927,7 +3038,6 @@ public class LuaBootstrapper : MonoBehaviour
         TooltipTrigger.Attach(zoomInBtn.gameObject, "BENCH_ZOOM_IN");
 
         GameObject surfGO = CreatePanel(centerMat.transform, "ItemSurface", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360, 360));
-        TooltipTrigger.Attach(surfGO, "BENCH_ITEM_SURFACE");
         itemSurfaceRT = surfGO.GetComponent<RectTransform>();
         itemSurfaceImg = surfGO.GetComponent<Image>();
 
@@ -2952,7 +3062,6 @@ public class LuaBootstrapper : MonoBehaviour
         toolCursorGO.SetActive(false);
 
         GameObject speedBar = CreatePanel(centerMat.transform, "SpeedBar", new Color(0.10f, 0.10f, 0.10f, 0.95f), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -26), new Vector2(360, 24), spBeveledButton, true);
-        TooltipTrigger.Attach(speedBar, "BENCH_SPEED_BAR");
         GameObject speedFill = CreatePanel(speedBar.transform, "Fill", new Color(0.28f, 0.82f, 0.42f, 1f), new Vector2(0, 0), new Vector2(0, 1), Vector2.zero, Vector2.zero);
         speedFillRT = speedFill.GetComponent<RectTransform>();
         speedFillRT.pivot = new Vector2(0, 0.5f);
@@ -4085,16 +4194,7 @@ public class LuaBootstrapper : MonoBehaviour
 
     private void CheckMidOrderTwist()
     {
-        int avgProg = (cleanProgress + grindProgress + clickFixProgress) / 3;
-        if (avgProg >= 45 && !twistChecked && activeOrder.twistType != "NONE")
-        {
-            twistChecked = true;
-            if (Random.value <= 0.60f)
-            {
-                PlaySFX(clipBell, 0.85f, 0.85f);
-                TriggerMidOrderTwist();
-            }
-        }
+        return;
     }
 
     private void TriggerMidOrderTwist()
@@ -4573,6 +4673,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
         float dmgMult = upgStabilizer ? 0.4f : 1.0f;
+        if (barsikBuffTimer > 0f) dmgMult *= 0.5f;
         int brushR = Mathf.RoundToInt(15 * radiusMult);
 
         bool isTooFast = speedRatio > (upgStabilizer ? 0.86f : 0.72f);
@@ -4640,6 +4741,7 @@ public class LuaBootstrapper : MonoBehaviour
 
         float radiusMult = upgPrecisionBits ? 1.4f : 1.0f;
         float dmgMult = upgStabilizer ? 0.4f : 1.0f;
+        if (barsikBuffTimer > 0f) dmgMult *= 0.5f;
         int grindR = Mathf.RoundToInt(20 * radiusMult);
         float grindPower = dt * (3.8f + speedRatio * 5.0f) * radiusMult;
         bool hitBurr = false;
@@ -4735,6 +4837,26 @@ public class LuaBootstrapper : MonoBehaviour
         UpdateClickNodesDecay(dt);
         UpdateDustMotes(dt);
         StepCatBreathing(dt);
+
+        if (barsikBuffTimer > 0f)
+        {
+            barsikBuffTimer -= dt;
+            if (barsikBuffTimer <= 0f)
+            {
+                barsikBuffTimer = 0f;
+                if (barsikBuffRoot != null) barsikBuffRoot.SetActive(false);
+            }
+            else
+            {
+                if (barsikBuffRoot != null && !barsikBuffRoot.activeSelf) barsikBuffRoot.SetActive(true);
+                if (barsikBuffText != null)
+                {
+                    int bm = Mathf.FloorToInt(barsikBuffTimer / 60f);
+                    int bs = Mathf.FloorToInt(barsikBuffTimer % 60f);
+                    barsikBuffText.text = $"🐾 Барсик: {bm:D2}:{bs:D2}";
+                }
+            }
+        }
 
         if (TimeController.Instance != null)
         {

@@ -223,6 +223,7 @@ public class TooltipManager : MonoBehaviour
 
     public void ShowTooltip(string title, string description, string hotkeyHint = null)
     {
+        if (Input.GetMouseButton(0)) return;
         if (panelRect == null) EnsureCanvasHierarchy();
         transform.SetAsLastSibling();
 
@@ -259,6 +260,11 @@ public class TooltipManager : MonoBehaviour
 
     private void Update()
     {
+        if (Input.GetMouseButton(0))
+        {
+            HideTooltip();
+        }
+
         if (canvasGroup != null && Mathf.Abs(canvasGroup.alpha - targetAlpha) > 0.01f)
         {
             canvasGroup.alpha = Mathf.MoveTowards(canvasGroup.alpha, targetAlpha, Time.unscaledDeltaTime * 14f);
