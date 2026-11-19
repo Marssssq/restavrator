@@ -1,13 +1,16 @@
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using System.IO;
 
 public static class Builder
 {
     public static void BuildWindows()
     {
+        string dir = Path.Combine(Directory.GetCurrentDirectory(), "Build");
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
         string[] scenes = new string[] { "Assets/Scenes/SampleScene.unity" };
-        string buildPath = "Build/Restavrator.exe";
+        string buildPath = Path.Combine(dir, "Restavrator.exe");
         BuildPlayerOptions opt = new BuildPlayerOptions
         {
             scenes = scenes,

@@ -5,9 +5,7 @@ using UnityEngine.EventSystems;
 
 public class LuaBootstrapper : MonoBehaviour
 {
-    // =========================================================================
-    // ЭКОНОМИКА, КВАЛИФИКАЦИЯ И СОСТОЯНИЕ ИГРЫ
-    // =========================================================================
+
     private int trust = 100;
     private int money = 400;
     private bool secretViolated = false;
@@ -18,10 +16,9 @@ public class LuaBootstrapper : MonoBehaviour
     private bool upgStabilizer = false;
     private int qualificationRank = 1;
 
-    private string viewState = "ROOM"; // "ROOM", "WINDOW_SELECT", "WORKBENCH", "CABINET", "UPGRADES", "TWIST", "RESULT", "FINALE"
-    private string orderStage = "NONE"; // "NONE" -> "NEED_DIAGNOSIS" -> "NEED_TOOLS" -> "READY_TO_RESTORE" -> "READY_TO_SUBMIT"
+    private string viewState = "ROOM";
+    private string orderStage = "NONE";
 
-    // Перемещение персонажа (Click-to-Move)
     private Vector2 playerPos = new Vector2(0f, -55f);
     private Vector2 targetPos = new Vector2(0f, -55f);
     private float moveSpeed = 310f;
@@ -29,20 +26,17 @@ public class LuaBootstrapper : MonoBehaviour
     private float walkAnimTimer = 0f;
     private float stepSoundTimer = 0f;
 
-    // Выбранные в шкафу инструменты и материалы
     private string selectedMechTool = null;
     private string selectedSolvent = null;
     private string selectedStyle = null;
-    private string activeBenchAction = "CLEAN"; // "CLEAN", "GRIND", "CLICK_FIX", "FINISH"
+    private string activeBenchAction = "CLEAN";
 
-    // Прогресс реставрации
     private int zonesDiscovered = 0;
     private int cleanProgress = 0;
     private int grindProgress = 0;
     private int clickFixProgress = 0;
     private float finishProgress = 0f;
 
-    // Повреждения и нормализованный датчик скорости мыши
     private bool chemicalStain = false;
     private bool wrongToolScratches = false;
     private float overScrubDamage = 0f;
@@ -57,9 +51,6 @@ public class LuaBootstrapper : MonoBehaviour
     private List<Texture2D> createdTextures = new List<Texture2D>();
     private List<AudioClip> createdClips = new List<AudioClip>();
 
-    // =========================================================================
-    // АУДИОСИСТЕМА (ФАЙЛЫ ИЗ RESOURCES/AUDIO ИЛИ ПРОЦЕДУРНЫЙ СИНТЕЗ)
-    // =========================================================================
     private AudioSource sfxSource;
     private AudioSource toolLoopSource;
     private AudioSource ambientSource;
@@ -67,9 +58,6 @@ public class LuaBootstrapper : MonoBehaviour
     private bool isMuted = false;
     private Text muteBtnText;
 
-    // =========================================================================
-    // СТРУКТУРЫ ДАННЫХ И КЛИК-УЗЛОВ С ТАЙМЕРОМ СБРОСА
-    // =========================================================================
     private class DiagZone
     {
         public float x, y, r;
@@ -94,7 +82,7 @@ public class LuaBootstrapper : MonoBehaviour
         public Image ringImg;
     }
 
-    private const float CLICK_RESET_TIME = 0.65f; // Если медлить > 0.65 сек, узел собирается обратно до 5
+    private const float CLICK_RESET_TIME = 0.65f;
     private List<ClickNode> activeClickNodes = new List<ClickNode>();
 
     private class DustMote
@@ -123,19 +111,16 @@ public class LuaBootstrapper : MonoBehaviour
     private List<OrderData> currentWindowChoices = new List<OrderData>();
     private OrderData activeOrder = null;
 
-    // Координаты подхода к станциям
     private readonly Vector2 posWindowInteract   = new Vector2(-355f, -15f);
     private readonly Vector2 posBenchInteract    = new Vector2(0f, 84f);
     private readonly Vector2 posCabinetInteract  = new Vector2(365f, 84f);
     private readonly Vector2 posUpgradesInteract = new Vector2(365f, -135f);
 
-    // Ссылки на UI комнаты
     private RectTransform roomAreaRT, playerRT, clickMarkerRT;
     private Text playerBubbleText, topTitleText, topStatsText, bottomHintText;
     private Image windowBadgeImg, benchBadgeImg, cabinetBadgeImg, benchItemPreviewImg;
     private float markerAlpha = 0f;
 
-    // Оверлеи
     private GameObject windowOverlay, workbenchOverlay, cabinetOverlay, upgradesOverlay, modalOverlay;
     private Text[] cardTitles = new Text[3];
     private Text[] cardClients = new Text[3];
@@ -155,9 +140,6 @@ public class LuaBootstrapper : MonoBehaviour
     private Image[] upgBtnImgs = new Image[4];
     private Image[] upgBadgeImgs = new Image[4];
 
-    // =========================================================================
-    // 2D PBR-ШЕЙДЕРНЫЕ БУФЕРЫ ПРЕДМЕТА (ALBEDO + NORMAL MAP + METALLIC/ROUGHNESS)
-    // =========================================================================
     private const int TEX_SIZE = 320;
     private Texture2D itemTex;
     private Color32[] pixelBuffer = new Color32[TEX_SIZE * TEX_SIZE];
@@ -166,8 +148,8 @@ public class LuaBootstrapper : MonoBehaviour
     private float[,] metallicMap = new float[TEX_SIZE, TEX_SIZE];
     private byte[,] isItemMask = new byte[TEX_SIZE, TEX_SIZE];
     private byte[,] isGemMask = new byte[TEX_SIZE, TEX_SIZE];
-    private byte[,] dirtMap = new byte[TEX_SIZE, TEX_SIZE];    // 0-нет, 1-окислы, 2-очищено, 3-стертый слой
-    private float[,] burrMap = new float[TEX_SIZE, TEX_SIZE];  // 0..1 зазубрины для быстрой шлифовки
+    private byte[,] dirtMap = new byte[TEX_SIZE, TEX_SIZE];
+    private float[,] burrMap = new float[TEX_SIZE, TEX_SIZE];
 
     private RectTransform itemSurfaceRT, loupeRT, speedFillRT, toolCursorRT;
     private Image itemSurfaceImg, speedFillImg, toolCursorImg;
@@ -178,7 +160,6 @@ public class LuaBootstrapper : MonoBehaviour
     private Image btnDoneImg;
     private Text btnDoneText;
 
-    // Система частиц искр
     private class SparkParticle
     {
         public RectTransform rt;
@@ -195,13 +176,9 @@ public class LuaBootstrapper : MonoBehaviour
     private Button modalBtn1, modalBtn2;
     private GameObject modalSealGO;
 
-    // PBR-спрайты интерфейса и мебели
     private Sprite spBeveledPanel, spBeveledButton, spWaxSealBadge, spSoftLightGlow, spLoupeLens, spTargetClamp, spTimerRing;
     private Sprite spStationWindow, spStationWorkbench, spStationCabinet, spStationMasterStand, spArtisanChar;
 
-    // =========================================================================
-    // СТАРТ И ИНИЦИАЛИЗАЦИЯ
-    // =========================================================================
     void Start()
     {
         QualitySettings.antiAliasing = 4;
@@ -246,9 +223,6 @@ public class LuaBootstrapper : MonoBehaviour
         return f;
     }
 
-    // =========================================================================
-    // АУДИОСИСТЕМА (ФАЙЛЫ ИЗ RESOURCES/AUDIO ИЛИ ПРОЦЕДУРНЫЙ СИНТЕЗ)
-    // =========================================================================
     private void InitAudioSystem()
     {
         sfxSource = gameObject.AddComponent<AudioSource>();
@@ -502,9 +476,6 @@ public class LuaBootstrapper : MonoBehaviour
         return c;
     }
 
-    // =========================================================================
-    // ПРОЦЕДУРНЫЙ 2D PBR-ШЕЙДЕРНЫЙ РЕНДЕРЕР СПРАЙТОВ (NORMAL MAP + BLINN-PHONG)
-    // =========================================================================
     private Color EvaluatePBRPixel(Color albedo, Vector3 normal, float metallic, float smoothness, Vector3 lightDir)
     {
         normal.Normalize();
@@ -592,7 +563,6 @@ public class LuaBootstrapper : MonoBehaviour
         spArtisanChar        = CreateDetailedArtisanSprite(116, 146);
     }
 
-    // PBR-Рама с объемной золотой фаской (Normal-Mapped Bevel)
     private Sprite CreatePBRFrameSprite(int w, int h, float radius, Color innerCol, Color brassCol)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -637,17 +607,16 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(radius, radius, radius, radius));
     }
 
-    // Паркетный пол с PBR-отражениями от 4 теплых ламп мастерской
     private Sprite CreateWoodFloorPBRSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
         Color32[] cols = new Color32[w * h];
 
         Vector2[] lampPositions = {
-            new Vector2(w * 0.14f, h * 0.48f), // У окна заказов
-            new Vector2(w * 0.50f, h * 0.78f), // Над рабочим столом
-            new Vector2(w * 0.80f, h * 0.78f), // У шкафа инструментов
-            new Vector2(w * 0.84f, h * 0.28f)  // У стенда мастера
+            new Vector2(w * 0.14f, h * 0.48f),
+            new Vector2(w * 0.50f, h * 0.78f),
+            new Vector2(w * 0.80f, h * 0.78f),
+            new Vector2(w * 0.84f, h * 0.28f)
         };
 
         for (int y = 0; y < h; y++)
@@ -664,13 +633,11 @@ public class LuaBootstrapper : MonoBehaviour
 
                 Color albedo = new Color(0.29f + grain + plankTone, 0.19f + grain * 0.8f + plankTone, 0.12f + grain * 0.5f, 1f);
 
-                // Нормаль паркетной доски (фаска на стыках)
                 Vector3 normal = new Vector3(grain * 1.5f, 0f, 1f);
                 if (seamY < 2.0f) { albedo *= 0.52f; normal.y = (y % 26 < 13) ? -0.6f : 0.6f; }
                 if (seamX < 2.0f) { albedo *= 0.52f; normal.x = ((x + rowOffset) % 136f < 68f) ? -0.6f : 0.6f; }
                 normal.Normalize();
 
-                // Суммирование освещения и бликов лака от ламп мастерской
                 Color totalLight = albedo * 0.35f;
                 for (int i = 0; i < lampPositions.Length; i++)
                 {
@@ -688,7 +655,6 @@ public class LuaBootstrapper : MonoBehaviour
                     totalLight += (albedo * diff * 0.85f + lampCol * spec) * atten;
                 }
 
-                // Мягкое затенение углов комнаты (Ambient Occlusion)
                 float nx = (x / (float)w) - 0.5f;
                 float ny = (y / (float)h) - 0.5f;
                 float ao = Mathf.Clamp01(1.22f - Mathf.Sqrt(nx * nx + ny * ny) * 0.92f);
@@ -703,7 +669,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Узорчатый рельефный ковер с микро-ворсом
     private Sprite CreateOrnateRugPBRSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -749,7 +714,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Станция 1 (Окно заказов): PBR-резное дерево, свинцовый витраж, бархат и латунный колокольчик
     private Sprite CreateWindowStationSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -778,13 +742,12 @@ public class LuaBootstrapper : MonoBehaviour
                     Color albedo = new Color(0.36f + grain, 0.20f + grain * 0.8f, 0.12f, 1f);
                     float met = 0.15f, smooth = 0.55f;
 
-                    // Золотой багет вдоль арки
                     if (Mathf.Abs(archDist - (archWidth - 11f)) < 2.6f)
                     {
                         albedo = new Color(0.90f, 0.72f, 0.28f, 1f);
                         met = 0.88f; smooth = 0.85f;
                     }
-                    // Стеклянный витраж с теплым контровым светом
+
                     else if (archDist < archWidth - 22f && y > 36 && y < h - 34)
                     {
                         float glassGlow = Mathf.Clamp01(1f - Vector2.Distance(new Vector2(dx, dy), new Vector2(0, 20f)) / 95f);
@@ -797,7 +760,6 @@ public class LuaBootstrapper : MonoBehaviour
                             met = 0.7f;
                         }
 
-                        // Объемные складки бордовых бархатных портьер
                         float curtainCurve = 38f + Mathf.Sin(y * 0.03f) * 18f;
                         if (Mathf.Abs(dx) > curtainCurve)
                         {
@@ -808,7 +770,6 @@ public class LuaBootstrapper : MonoBehaviour
                         }
                     }
 
-                    // Бархатная подушечка для приема украшений
                     float pillowDist = (dx * dx) / (46f * 46f) + ((y - 48f) * (y - 48f)) / (18f * 18f);
                     if (pillowDist < 1f)
                     {
@@ -817,7 +778,6 @@ public class LuaBootstrapper : MonoBehaviour
                         met = 0.1f; smooth = 0.45f;
                     }
 
-                    // Латунный колокольчик с зеркальным бликом
                     float bellDome = (dx + 48f) * (dx + 48f) / (13f * 13f + Mathf.Max(0, 75f - y) * 3f) + ((y - 68f) * (y - 68f)) / (14f * 14f);
                     if (bellDome < 1f && y >= 56 && y <= 82)
                     {
@@ -836,7 +796,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Станция 2 (Рабочий стол): Верстак с кожаным финагелем, латунной лампой и стальными штихелями
     private Sprite CreateWorkbenchStationSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -877,7 +836,6 @@ public class LuaBootstrapper : MonoBehaviour
                         met = 0.05f; smooth = 0.28f;
                     }
 
-                    // Стальные ювелирные штихели с деревянными ручками
                     for (int t = 0; t < 3; t++)
                     {
                         float tx = dx - (92f + t * 18f) + (y - cy) * 0.25f;
@@ -889,7 +847,6 @@ public class LuaBootstrapper : MonoBehaviour
                         }
                     }
 
-                    // Изумрудный абажур лампы в латунной оправе
                     float shadeDist = Vector2.Distance(new Vector2(dx, dy), new Vector2(-118f, 38f));
                     if (shadeDist < 26f && dy > 26f - Mathf.Abs(dx + 118f) * 0.4f)
                     {
@@ -908,7 +865,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Станция 3 (Шкаф инструментов): Застекленный сервант с объемными колбами и стальными щипцами
     private Sprite CreateCabinetStationSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -986,7 +942,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Станция 4 (Стенд Мастера): Резная кафедра с золоченым багетом и сургучными печатями
     private Sprite CreateMasterStandSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -1051,7 +1006,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
     }
 
-    // Персонаж (Мастер-реставратор с нормал-маппингом кожаного фартука, ремня и бинокуляров)
     private Sprite CreateDetailedArtisanSprite(int w, int h)
     {
         Texture2D tex = CreateTrackedTexture(w, h);
@@ -1302,9 +1256,6 @@ public class LuaBootstrapper : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
     }
 
-    // =========================================================================
-    // ПУЛ ЗАКАЗОВ
-    // =========================================================================
     private void GenerateWindowOrderChoices()
     {
         currentWindowChoices.Clear();
@@ -1458,9 +1409,6 @@ public class LuaBootstrapper : MonoBehaviour
         return cheap;
     }
 
-    // =========================================================================
-    // СОЗДАНИЕ ИНТЕРФЕЙСА И КОМНАТЫ МАСТЕРСКОЙ
-    // =========================================================================
     private GameObject CreatePanel(Transform parent, string name, Color col, Vector2 aMin, Vector2 aMax, Vector2 pos, Vector2 size, Sprite customSprite = null, bool sliced = false, bool addShadow = false)
     {
         GameObject go = new GameObject(name);
@@ -1564,7 +1512,7 @@ public class LuaBootstrapper : MonoBehaviour
 
     private void BuildAllUI()
     {
-        if (FindFirstObjectByType<EventSystem>() == null)
+        if (FindAnyObjectByType<EventSystem>() == null)
         {
             GameObject es = new GameObject("EventSystem");
             es.AddComponent<EventSystem>();
@@ -1582,7 +1530,6 @@ public class LuaBootstrapper : MonoBehaviour
 
         GameObject rootBG = CreatePanel(canvasGO.transform, "RootBG", new Color(0.08f, 0.06f, 0.05f, 1f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-        // Пол с PBR-освещением от ламп и узорчатый ковер
         Sprite woodSprite = CreateWoodFloorPBRSprite(512, 256);
         GameObject roomGO = CreatePanel(rootBG.transform, "RoomArea", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 4), new Vector2(1240, 580), woodSprite, false, true);
         roomAreaRT = roomGO.GetComponent<RectTransform>();
@@ -1591,7 +1538,6 @@ public class LuaBootstrapper : MonoBehaviour
         GameObject rug = CreatePanel(roomAreaRT, "WorkshopRug", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-10, -45), new Vector2(540, 260), rugSprite, false, true);
         rug.GetComponent<Image>().raycastTarget = false;
 
-        // Верхняя и левая стены с резным карнизом
         GameObject topWall = CreatePanel(roomAreaRT, "TopWall", new Color(0.15f, 0.12f, 0.10f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 128), null, false, true);
         topWall.GetComponent<Image>().raycastTarget = false;
         GameObject trimTop = CreatePanel(topWall.transform, "WoodTrim", new Color(0.52f, 0.34f, 0.18f, 1f), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 4), new Vector2(0, 8));
@@ -1600,7 +1546,6 @@ public class LuaBootstrapper : MonoBehaviour
         GameObject leftWall = CreatePanel(roomAreaRT, "LeftWall", new Color(0.15f, 0.12f, 0.10f, 1f), new Vector2(0, 0), new Vector2(0, 1), new Vector2(72, 0), new Vector2(144, 0), null, false, true);
         leftWall.GetComponent<Image>().raycastTarget = false;
 
-        // --- 1. ОКНО ЗАКАЗОВ (СЛЕВА) ---
         GameObject winGlow = CreatePanel(roomAreaRT, "WinLampGlow", new Color(1f, 0.86f, 0.55f, 0.30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-440, -15), new Vector2(380, 380), spSoftLightGlow);
         winGlow.GetComponent<Image>().raycastTarget = false;
 
@@ -1612,7 +1557,6 @@ public class LuaBootstrapper : MonoBehaviour
         windowBadgeImg.raycastTarget = false;
         CreateText(winBadge.transform, "Excl", "!", 19, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
 
-        // --- 2. РАБОЧИЙ СТОЛ (НА ВЕРХНЕЙ СТЕНЕ ПО ЦЕНТРУ) ---
         GameObject benchGlow = CreatePanel(roomAreaRT, "BenchLampGlow", new Color(1f, 0.90f, 0.60f, 0.36f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 175), new Vector2(490, 360), spSoftLightGlow);
         benchGlow.GetComponent<Image>().raycastTarget = false;
 
@@ -1628,7 +1572,6 @@ public class LuaBootstrapper : MonoBehaviour
         benchBadgeImg.raycastTarget = false;
         CreateText(benchBadge.transform, "Excl", "!", 19, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
 
-        // --- 3. ШКАФ ИНСТРУМЕНТОВ (СПРАВА СВЕРХУ) ---
         GameObject cabGlow = CreatePanel(roomAreaRT, "CabLampGlow", new Color(0.75f, 0.92f, 1f, 0.25f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(375, 175), new Vector2(370, 310), spSoftLightGlow);
         cabGlow.GetComponent<Image>().raycastTarget = false;
 
@@ -1640,7 +1583,6 @@ public class LuaBootstrapper : MonoBehaviour
         cabinetBadgeImg.raycastTarget = false;
         CreateText(cabBadge.transform, "Excl", "!", 19, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, true);
 
-        // --- 4. СТЕНД МАСТЕРА (СПРАВА ВНИЗУ) ---
         GameObject upgGlow = CreatePanel(roomAreaRT, "UpgGlow", new Color(1f, 0.82f, 0.40f, 0.24f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(465, -135), new Vector2(320, 290), spSoftLightGlow);
         upgGlow.GetComponent<Image>().raycastTarget = false;
 
@@ -1648,7 +1590,6 @@ public class LuaBootstrapper : MonoBehaviour
         AddStationClickTrigger(upgStation, posUpgradesInteract, "UPGRADES");
         CreateText(upgStation.transform, "UpgTitle", "СТЕНД МАСТЕРА", 17, new Color(1f, 0.92f, 0.62f, 1f), Vector2.zero, Vector2.one, new Vector2(0, -52), new Vector2(-14, -14), TextAnchor.MiddleCenter, true);
 
-        // Маркер клика ЛКМ на полу
         GameObject markerGO = CreatePanel(roomAreaRT, "ClickMarker", new Color(1f, 0.88f, 0.35f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(36, 36), spWaxSealBadge);
         markerGO.GetComponent<Image>().raycastTarget = false;
         clickMarkerRT = markerGO.GetComponent<RectTransform>();
@@ -1670,7 +1611,6 @@ public class LuaBootstrapper : MonoBehaviour
             });
         }
 
-        // --- ПЕРСОНАЖ (МАСТЕР-РЕСТАВРАТОР) ---
         GameObject playerGO = CreatePanel(roomAreaRT, "PlayerCharacter", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), playerPos, new Vector2(98, 126), spArtisanChar);
         playerGO.GetComponent<Image>().raycastTarget = false;
         playerRT = playerGO.GetComponent<RectTransform>();
@@ -1679,7 +1619,6 @@ public class LuaBootstrapper : MonoBehaviour
         bubbleGO.GetComponent<Image>().raycastTarget = false;
         playerBubbleText = CreateText(bubbleGO.transform, "BubbleTxt", "Иду к окну заказов", 12, new Color(0.98f, 0.92f, 0.76f, 1f), Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-10, -4), TextAnchor.MiddleCenter, true);
 
-        // Верхняя и нижняя панели
         GameObject topBar = CreatePanel(rootBG.transform, "TopBar", new Color(0.16f, 0.12f, 0.09f, 1f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -28), new Vector2(0, 56), null, false, true);
         topTitleText = CreateText(topBar.transform, "Title", "Мастерская «Реставратор»", 17, new Color(0.98f, 0.88f, 0.64f, 1f), new Vector2(0, 0), new Vector2(0.52f, 1), new Vector2(22, 0), new Vector2(-20, 0), TextAnchor.MiddleLeft, true);
         topStatsText = CreateText(topBar.transform, "Stats", "", 15, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.52f, 0), new Vector2(1, 1), new Vector2(-68, 0), new Vector2(-74, 0), TextAnchor.MiddleRight, true);
@@ -1705,9 +1644,6 @@ public class LuaBootstrapper : MonoBehaviour
         BuildModalOverlay(rootBG.transform);
     }
 
-    // =========================================================================
-    // ОВЕРЛЕИ СТАНЦИЙ
-    // =========================================================================
     private void BuildWindowSelectionOverlay(Transform parent)
     {
         windowOverlay = CreatePanel(parent, "WindowOverlay", Color.white, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 4), new Vector2(1150, 546), spBeveledPanel, true, true);
@@ -2007,9 +1943,6 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
-    // =========================================================================
-    // СИСТЕМА ЧАСТИЦ И УЗЛОВ С ОБРАТНЫМ СБРОСОМ ДО 5 ПРИ МЕДЛЕННЫХ КЛИКАХ
-    // =========================================================================
     private void EmitSparks(Vector2 localPos, int count, Color sparkCol)
     {
         int spawned = 0;
@@ -2201,9 +2134,6 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
-    // =========================================================================
-    // ГЕНЕРАЦИЯ КАРТ НОРМАЛЕЙ И ПОВЕРХНОСТИ УКРАШЕНИЯ (2D PBR SHADER)
-    // =========================================================================
     private void GenerateItemTexture(string shapeType)
     {
         if (itemTex != null) Destroy(itemTex);
@@ -2382,14 +2312,12 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
-    // Попиксельный PBR-шейдер предмета с динамическим источником света от курсора мыши
     private void RefreshItemVisuals()
     {
         if (itemTex == null) return;
         int totalDirt = 0, cleanedDirt = 0, totalBurr = 0, fixedBurr = 0;
         float scale = TEX_SIZE / 200f;
 
-        // Позиция лампы в координатах текстуры 320x320
         float lightTexX = ((currentLightPos.x + 180f) / 360f) * TEX_SIZE;
         float lightTexY = ((currentLightPos.y + 180f) / 360f) * TEX_SIZE;
 
@@ -2409,7 +2337,6 @@ public class LuaBootstrapper : MonoBehaviour
                 float metallic = metallicMap[y, x];
                 float smoothness = 0.72f;
 
-                // Эффект финишной полировки на параметры PBR-шейдера
                 if (finishProgress > 10f)
                 {
                     float fRatio = finishProgress / 100f;
@@ -2425,7 +2352,6 @@ public class LuaBootstrapper : MonoBehaviour
                     }
                 }
 
-                // Окислы (блокируют металлический блеск и увеличивают шероховатость)
                 byte dVal = dirtMap[y, x];
                 if (dVal == 1 || dVal == 2)
                 {
@@ -2439,7 +2365,6 @@ public class LuaBootstrapper : MonoBehaviour
                     else cleanedDirt++;
                 }
 
-                // Зазубрины (меняют нормаль и цвет на шероховатую бронзу)
                 float bVal = burrMap[y, x];
                 if (bVal > 0f)
                 {
@@ -2517,9 +2442,6 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
-    // =========================================================================
-    // УПРАВЛЕНИЕ СОСТОЯНИЯМИ, ЭКОНОМИКОЙ И ОЦЕНКОЙ
-    // =========================================================================
     private void SetViewState(string newState)
     {
         viewState = newState;
@@ -3051,9 +2973,6 @@ public class LuaBootstrapper : MonoBehaviour
         modalBtn2.gameObject.SetActive(false);
     }
 
-    // =========================================================================
-    // ПОКАДРОВОЕ ОБНОВЛЕНИЕ (С РЕАЛТАЙМОВЫМ 2D PBR-ОСВЕЩЕНИЕМ ОТ КУРСОРА)
-    // =========================================================================
     private void UpdateDustMotes(float dt)
     {
         if (viewState != "ROOM")
