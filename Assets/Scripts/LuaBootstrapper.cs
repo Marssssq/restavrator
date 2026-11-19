@@ -2143,13 +2143,56 @@ public class LuaBootstrapper : MonoBehaviour
         if (isDone)
         {
             PlaySFX(clipCrystalChime, 0.75f, 1.2f + idx * 0.15f);
-            bottomHintText.text = $"Музейная экспертиза: {titles[idx]} находится в безупречном эталонном состоянии!";
+            ShowRelicCertificate(idx);
         }
         else
         {
             PlaySFX(clipFail, 0.5f, 1.0f);
             bottomHintText.text = $"Шедевр «{titles[idx]}» еще не отреставрирован. Примите заказ в Окне заказов!";
         }
+    }
+
+    private void ShowRelicCertificate(int idx)
+    {
+        SetViewState("CERTIFICATE");
+        modalSealGO.SetActive(true);
+        modalSealGO.GetComponent<Image>().color = new Color(0.95f, 0.78f, 0.25f, 1f);
+        modalSealText.text = "ЭТАЛОН";
+
+        string[] titles = {
+            "Золотой перстень 1812 года",
+            "Платиновый солитер с бриллиантом",
+            "Императорский орден Фаберже",
+            "Византийский энколпион XII века"
+        };
+        string[] epochs = {
+            "Эпоха Отечественной войны 1812 года (Российская империя)",
+            "Конец XIX века, придворная мастерская Санкт-Петербурга",
+            "Начало XX века, дом Карла Фаберже, императорская серия",
+            "XII век, Царьград (Константинополь), Патриаршие мастерские"
+        };
+        string[] materials = {
+            "Червонное золото 958°, уральский рубин огранки «кушон», тайная гравировка вензеля.",
+            "Платина 950°, природный якутский алмаз 2.4 карата королевской бриллиантовой огранки.",
+            "Золоченое серебро 84 золотника, горячая гильошированная эмаль, золотой гербовый орел.",
+            "Древнее византийское золото высокой пробы, филигранная скань, кабошон звездчатого сапфира."
+        };
+        string[] expertEvaluations = {
+            "Экспертиза подтвердила сохранность тайного шифра декабристов в полости безеля. Патина стабилизирована.",
+            "Огранка очищена от вековых минеральных налетов. Идеальная дисперсия граней подтверждена оптическим тестом.",
+            "Стеклянная эмаль восстановлена без сколов и перегрева. Клеймо мастера Фаберже сохранено без потерь.",
+            "Древнейшая золотая скань и реликварийная полость укреплены. Реликвия внесена в Патриарший реестр."
+        };
+
+        modalTitle.text = "ПАСПОРТ ПОДЛИННОСТИ: " + titles[idx];
+        modalBody.text = $"ГИЛЬДЕЙСКИЙ СЕРТИФИКАТ КАЧЕСТВА №0{idx + 1}-1926\n\n" +
+                         $"• Происхождение: {epochs[idx]}\n" +
+                         $"• Материалы и сплав: {materials[idx]}\n" +
+                         $"• Заключение экспертизы: {expertEvaluations[idx]}\n\n" +
+                         $"Статус: Признан музейным эталоном высшей художественной ценности.";
+        modalBtn1.gameObject.SetActive(true);
+        modalBtn1Text.text = "← Вернуться в музейную галерею";
+        modalBtn2.gameObject.SetActive(false);
     }
 
     private void BuildWorkbenchOverlay(Transform parent)
@@ -2883,7 +2926,7 @@ public class LuaBootstrapper : MonoBehaviour
         workbenchOverlay.SetActive(newState == "WORKBENCH");
         cabinetOverlay.SetActive(newState == "CABINET");
         upgradesOverlay.SetActive(newState == "UPGRADES");
-        modalOverlay.SetActive(newState == "TWIST" || newState == "RESULT" || newState == "FINALE");
+        modalOverlay.SetActive(newState == "TWIST" || newState == "RESULT" || newState == "FINALE" || newState == "CERTIFICATE");
 
         if (newState != "WORKBENCH")
         {
@@ -3311,6 +3354,11 @@ public class LuaBootstrapper : MonoBehaviour
                 ShowShiftFinale();
             }
         }
+        else if (viewState == "CERTIFICATE")
+        {
+            SetViewState("UPGRADES");
+            SelectMasterStandTab(1);
+        }
         else if (viewState == "FINALE")
         {
             trust = 100;
@@ -3479,7 +3527,13 @@ public class LuaBootstrapper : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
+            if (viewState == "CERTIFICATE")
+            {
+                PlaySFX(clipClickPin, 0.4f, 0.9f);
+                SetViewState("UPGRADES");
+                SelectMasterStandTab(1);
+            }
+            else if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
             {
                 PlaySFX(clipClickPin, 0.4f, 0.9f);
                 SetViewState("ROOM");
@@ -3500,7 +3554,13 @@ public class LuaBootstrapper : MonoBehaviour
 
         if (Input.GetMouseButtonDown(1))
         {
-            if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
+            if (viewState == "CERTIFICATE")
+            {
+                PlaySFX(clipClickPin, 0.4f, 0.9f);
+                SetViewState("UPGRADES");
+                SelectMasterStandTab(1);
+            }
+            else if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
             {
                 PlaySFX(clipClickPin, 0.4f, 0.9f);
                 SetViewState("ROOM");
