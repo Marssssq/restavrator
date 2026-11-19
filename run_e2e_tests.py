@@ -25,7 +25,7 @@ def ensure_shadow_project(source, shadow):
         src_dir = os.path.join(source, j)
         tgt_dir = os.path.join(shadow, j)
         if not os.path.exists(tgt_dir) and os.path.exists(src_dir):
-            subprocess.run(['cmd', '/c', f'mklink /J "{tgt_dir}" "{src_dir}"'], shell=True, check=True)
+            subprocess.run(f'mklink /J "{tgt_dir}" "{src_dir}"', shell=True, check=True)
 
 target_project = project_root
 if is_project_locked(project_root):
