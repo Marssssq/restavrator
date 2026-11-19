@@ -184,6 +184,16 @@ public class LuaBootstrapper : MonoBehaviour
     private float sparkSpawnTimer = 0f;
     private float gemGleamTimer = 1.5f;
 
+    private class FloatingTextItem
+    {
+        public RectTransform rt;
+        public Text txt;
+        public Vector2 pos;
+        public float timer, maxTime;
+        public Color baseCol;
+    }
+    private List<FloatingTextItem> floatingTexts = new List<FloatingTextItem>();
+
     private Text modalTitle, modalBody, modalBtn1Text, modalBtn2Text, modalSealText;
     private Button modalBtn1, modalBtn2;
     private GameObject modalSealGO;
@@ -283,6 +293,13 @@ public class LuaBootstrapper : MonoBehaviour
         if (clip == null || sfxSource == null) return;
         sfxSource.pitch = pitch;
         sfxSource.PlayOneShot(clip, volume);
+    }
+
+    private void ToggleMute()
+    {
+        isMuted = !isMuted;
+        AudioListener.volume = isMuted ? 0f : 1f;
+        if (muteBtnText != null) muteBtnText.text = isMuted ? "🔇" : "🔊";
     }
 
     private AudioClip SynthesizeBellClip()
@@ -1757,9 +1774,7 @@ public class LuaBootstrapper : MonoBehaviour
         topStatsText = CreateText(topBar.transform, "Stats", "", 15, new Color(0.86f, 0.95f, 0.82f, 1f), new Vector2(0.52f, 0), new Vector2(1, 1), new Vector2(-68, 0), new Vector2(-74, 0), TextAnchor.MiddleRight, true);
 
         Button muteBtn = CreateButton(topBar.transform, "MuteBtn", "🔊", Vector2.zero, new Vector2(40, 36), new Color(0.24f, 0.18f, 0.14f, 1f), () => {
-            isMuted = !isMuted;
-            AudioListener.volume = isMuted ? 0f : 1f;
-            if (muteBtnText != null) muteBtnText.text = isMuted ? "🔇" : "🔊";
+            ToggleMute();
         }, out muteBtnText, out _);
         RectTransform mbrt = muteBtn.GetComponent<RectTransform>();
         mbrt.anchorMin = new Vector2(1, 0.5f);
@@ -2107,6 +2122,23 @@ public class LuaBootstrapper : MonoBehaviour
             SetViewState("ROOM");
         }, out _, out _);
 
+        for (int i = 0; i < 12; i++)
+        {
+            GameObject ftGO = new GameObject("FText_" + i);
+            ftGO.transform.SetParent(workbenchOverlay.transform, false);
+            RectTransform ftRT = ftGO.AddComponent<RectTransform>();
+            ftRT.sizeDelta = new Vector2(320, 38);
+            Text ftTxt = ftGO.AddComponent<Text>();
+            ftTxt.font = Font.CreateDynamicFontFromOSFont("Segoe UI", 16);
+            if (ftTxt.font == null) ftTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            ftTxt.fontSize = 16;
+            ftTxt.fontStyle = FontStyle.Bold;
+            ftTxt.alignment = TextAnchor.MiddleCenter;
+            ftTxt.raycastTarget = false;
+            ftGO.SetActive(false);
+            floatingTexts.Add(new FloatingTextItem { rt = ftRT, txt = ftTxt, timer = 0f, maxTime = 1.2f });
+        }
+
         workbenchOverlay.SetActive(false);
     }
 
@@ -2214,6 +2246,43 @@ public class LuaBootstrapper : MonoBehaviour
         }
     }
 
+    private void SpawnFloatingText(Vector2 localPos, string text, Color col)
+    {
+        foreach (var ft in floatingTexts)
+        {
+            if (ft.timer <= 0f)
+            {
+                ft.rt.gameObject.SetActive(true);
+                ft.rt.anchoredPosition = localPos;
+                ft.pos = localPos;
+                ft.txt.text = text;
+                ft.baseCol = col;
+                ft.txt.color = col;
+                ft.timer = 1.15f;
+                ft.maxTime = 1.15f;
+                return;
+            }
+        }
+    }
+
+    private void UpdateFloatingTexts(float dt)
+    {
+        foreach (var ft in floatingTexts)
+        {
+            if (ft.timer > 0f)
+            {
+                ft.timer -= dt;
+                float progress = 1f - (ft.timer / ft.maxTime);
+                ft.pos.y += dt * 38f;
+                ft.rt.anchoredPosition = ft.pos;
+                Color c = ft.baseCol;
+                c.a = Mathf.Clamp01(1f - progress * progress);
+                ft.txt.color = c;
+                if (ft.timer <= 0f) ft.rt.gameObject.SetActive(false);
+            }
+        }
+    }
+
     private void UpdateSparks(float dt)
     {
         for (int i = 0; i < sparks.Count; i++)
@@ -2310,6 +2379,10 @@ public class LuaBootstrapper : MonoBehaviour
             cn.uiRT.localScale = new Vector2(1.22f, 1.22f);
             PlaySFX(clipClickPin, 0.65f, 0.9f + (5 - cn.clicksLeft) * 0.14f);
             EmitSparks(cn.pos, 7, new Color(0.55f, 0.92f, 1f, 1f));
+            if (cn.clicksLeft > 0)
+                SpawnFloatingText(cn.pos + new Vector2(0, 22), $"-1 Клик (осталось {cn.clicksLeft})", new Color(0.55f, 0.92f, 1f, 1f));
+            else
+                SpawnFloatingText(cn.pos + new Vector2(0, 26), "✓ Цанга закреплена!", new Color(0.40f, 1f, 0.50f, 1f));
 
             if (cn.clicksLeft <= 0)
             {
@@ -2683,11 +2756,13 @@ public class LuaBootstrapper : MonoBehaviour
             {
                 PlaySFX(clipCrystalChime, 0.75f, 1.25f);
                 bottomHintText.text = "ОЧИСТКА ВЫПОЛНЕНА! Теперь переключитесь на 2. Шлифовка (рывками) или продолжайте до 100%.";
+                SpawnFloatingText(new Vector2(0, 80), "✓ Очистка выполнена (75%+)", new Color(0.40f, 0.85f, 1f, 1f));
             }
             if (prevG < 75 && grindProgress >= 75)
             {
                 PlaySFX(clipCrystalChime, 0.75f, 1.35f);
                 bottomHintText.text = "ШЛИФОВКА ВЫПОЛНЕНА! Перейдите к 3. Закрепка узлов кликами или доведите до 100%.";
+                SpawnFloatingText(new Vector2(0, 80), "✓ Шлифовка выполнена (75%+)", new Color(1f, 0.85f, 0.35f, 1f));
             }
         }
     }
@@ -3261,8 +3336,30 @@ public class LuaBootstrapper : MonoBehaviour
         Vector3 mousePos = Input.mousePosition;
 
         UpdateSparks(dt);
+        UpdateFloatingTexts(dt);
         UpdateClickNodesDecay(dt);
         UpdateDustMotes(dt);
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (viewState == "WORKBENCH" || viewState == "CABINET" || viewState == "WINDOW_SELECT" || viewState == "UPGRADES")
+            {
+                PlaySFX(clipClickPin, 0.4f, 0.9f);
+                SetViewState("ROOM");
+            }
+        }
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            ToggleMute();
+        }
+        if (viewState == "WORKBENCH")
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha1)) SelectBenchTool("CLEAN");
+            else if (Input.GetKeyDown(KeyCode.Alpha2)) SelectBenchTool("GRIND");
+            else if (Input.GetKeyDown(KeyCode.Alpha3)) SelectBenchTool("CLICK_FIX");
+            else if (Input.GetKeyDown(KeyCode.Alpha4)) SelectBenchTool("FINISH");
+            else if (Input.GetKeyDown(KeyCode.Z)) CycleBenchZoom();
+        }
 
         if (Input.GetMouseButtonDown(1))
         {
@@ -3402,6 +3499,7 @@ public class LuaBootstrapper : MonoBehaviour
                             benchLogText.text += "\n\n• " + d.text;
                             bottomHintText.text = $"Найдено повреждений под лупой: {zonesDiscovered} / 3";
                             EmitSparks(localPt, 8, new Color(0.95f, 0.90f, 0.45f, 1f));
+                            SpawnFloatingText(localPt + new Vector2(0, 24), "+1 Дефект обнаружен!", new Color(1f, 0.90f, 0.45f, 1f));
                             if (zonesDiscovered >= 3)
                             {
                                 PlaySFX(clipBell, 0.75f, 1.2f);
@@ -3600,11 +3698,16 @@ public class LuaBootstrapper : MonoBehaviour
                         {
                             float prevFinish = finishProgress;
                             finishProgress = Mathf.Min(100f, finishProgress + dt * 48f * radiusMult);
+                            if (prevFinish < 80f && finishProgress >= 80f)
+                            {
+                                SpawnFloatingText(new Vector2(0, 80), "✓ Лоск наведен (80%+)", new Color(0.40f, 1f, 0.60f, 1f));
+                            }
                             if (prevFinish < 100f && finishProgress >= 100f)
                             {
                                 PlaySFX(clipBell, 0.85f, 1.25f);
                                 EmitSparks(localPt, 14, new Color(1f, 0.95f, 0.65f, 1f));
                                 bottomHintText.text = "РЕСТАВРАЦИЯ ЗАВЕРШЕНА! Нажмите 'Завершить и отнести в Окно заказов'.";
+                                SpawnFloatingText(new Vector2(0, 80), "★ ИДЕАЛЬНЫЙ ЛОСК (100%)", new Color(1f, 0.95f, 0.50f, 1f));
                             }
                             modified = true;
                             sparkSpawnTimer += dt;
