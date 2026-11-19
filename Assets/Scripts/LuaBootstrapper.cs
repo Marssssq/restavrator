@@ -265,6 +265,16 @@ public class LuaBootstrapper : MonoBehaviour
 
     void Start()
     {
+        AudioListener.volume = 1f;
+        AudioListener.pause = false;
+        isMuted = false;
+
+        if (FindAnyObjectByType<AudioListener>() == null)
+        {
+            if (Camera.main != null) Camera.main.gameObject.AddComponent<AudioListener>();
+            else gameObject.AddComponent<AudioListener>();
+        }
+
         if (Camera.main != null)
         {
             Camera.main.clearFlags = CameraClearFlags.SolidColor;
@@ -321,21 +331,25 @@ public class LuaBootstrapper : MonoBehaviour
     {
         sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
+        sfxSource.spatialBlend = 0f;
 
         toolLoopSource = gameObject.AddComponent<AudioSource>();
         toolLoopSource.playOnAwake = false;
         toolLoopSource.loop = true;
         toolLoopSource.volume = 0.32f;
+        toolLoopSource.spatialBlend = 0f;
 
         ambientSource = gameObject.AddComponent<AudioSource>();
         ambientSource.playOnAwake = false;
         ambientSource.loop = true;
         ambientSource.volume = 0.20f;
+        ambientSource.spatialBlend = 0f;
 
         musicSource = gameObject.AddComponent<AudioSource>();
         musicSource.playOnAwake = false;
         musicSource.loop = true;
         musicSource.volume = 0.24f;
+        musicSource.spatialBlend = 0f;
 
         clipBell        = LoadOrSynthesize("Audio/bell",   SynthesizeBellClip);
         clipStep        = LoadOrSynthesize("Audio/step",   SynthesizeStepClip);
@@ -427,6 +441,25 @@ public class LuaBootstrapper : MonoBehaviour
                             samples[i] = s / 32768f;
                         }
                     }
+                    else if (bitsPerSample == 24)
+                    {
+                        for (int i = 0; i < sampleCount && pos + i * 3 + 2 < bytes.Length; i++)
+                        {
+                            int b0 = bytes[pos + i * 3];
+                            int b1 = bytes[pos + i * 3 + 1];
+                            int b2 = bytes[pos + i * 3 + 2];
+                            int val = b0 | (b1 << 8) | (b2 << 16);
+                            if (val >= 0x800000) val -= 0x1000000;
+                            samples[i] = val / 8388608f;
+                        }
+                    }
+                    else if (bitsPerSample == 32)
+                    {
+                        for (int i = 0; i < sampleCount && pos + i * 4 + 3 < bytes.Length; i++)
+                        {
+                            samples[i] = System.BitConverter.ToSingle(bytes, pos + i * 4);
+                        }
+                    }
                     else if (bitsPerSample == 8)
                     {
                         for (int i = 0; i < sampleCount && pos + i < bytes.Length; i++)
@@ -459,7 +492,11 @@ public class LuaBootstrapper : MonoBehaviour
     private AudioClip LoadOrSynthesize(string path, System.Func<AudioClip> synthFunc)
     {
         AudioClip loaded = Resources.Load<AudioClip>(path);
-        if (loaded != null) return loaded;
+        if (loaded != null)
+        {
+            loaded.LoadAudioData();
+            return loaded;
+        }
 
         string fileName = System.IO.Path.GetFileName(path);
         string[] searchPaths = new string[] {
