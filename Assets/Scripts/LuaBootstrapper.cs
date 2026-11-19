@@ -1542,6 +1542,24 @@ public class LuaBootstrapper : MonoBehaviour
                 MovePlayerToStation(interactPos, stationId);
             }
         });
+
+        string tip = (stationId == "WINDOW") ? "ОКНО ЗАКАЗОВ (ЛКМ): Выбрать старинное украшение или сдать готовую работу заказчику." :
+                     ((stationId == "WORKBENCH") ? "РАБОЧИЙ СТОЛ (ЛКМ): Диагностика дефектов под лупой и 4 этапа ручной реставрации." :
+                     ((stationId == "CABINET") ? "ШКАФ ИНСТРУМЕНТОВ (ЛКМ): Подбор ювелирных насадок, химии и финишного стиля." :
+                     "СТЕНД МАСТЕРА (ЛКМ): Покупка алмазных насадок, стабилизатора и повышение разряда."));
+
+        EventTrigger trigger = stationGO.AddComponent<EventTrigger>();
+        EventTrigger.Entry enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        enter.callback.AddListener((data) => {
+            if (viewState == "ROOM") bottomHintText.text = tip;
+        });
+        trigger.triggers.Add(enter);
+
+        EventTrigger.Entry exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        exit.callback.AddListener((data) => {
+            if (viewState == "ROOM") UpdateRoomIndicators();
+        });
+        trigger.triggers.Add(exit);
     }
 
     private void BuildAllUI()
@@ -1927,7 +1945,10 @@ public class LuaBootstrapper : MonoBehaviour
         };
         int activeIdx = toolId == "CLEAN" ? 0 : (toolId == "GRIND" ? 1 : (toolId == "CLICK_FIX" ? 2 : 3));
         for (int i = 0; i < 4; i++)
+        {
             benchToolBtnImgs[i].color = (i == activeIdx) ? new Color(0.72f, 0.56f, 0.22f, 1f) : defCols[i];
+            benchToolBtnImgs[i].transform.localScale = (i == activeIdx) ? new Vector3(1.04f, 1.04f, 1f) : Vector3.one;
+        }
 
         PlaySFX(clipToolSwitch, 0.5f, activeIdx == 0 ? 0.9f : (activeIdx == 1 ? 1.1f : (activeIdx == 2 ? 1.3f : 1.5f)));
 
@@ -2107,6 +2128,8 @@ public class LuaBootstrapper : MonoBehaviour
             if (cn.clicksLeft <= 0)
             {
                 cn.uiRT.gameObject.SetActive(false);
+                PlaySFX(clipCrystalChime, 0.7f, 1.4f);
+                EmitSparks(cn.pos, 14, new Color(0.35f, 0.95f, 0.45f, 1f));
             }
             else
             {
@@ -2166,7 +2189,13 @@ public class LuaBootstrapper : MonoBehaviour
             total += n.maxClicks;
             done += (n.maxClicks - n.clicksLeft);
         }
+        int prev = clickFixProgress;
         clickFixProgress = (total > 0) ? Mathf.FloorToInt((done / (float)total) * 100f) : 100;
+        if (prev < 100 && clickFixProgress >= 100)
+        {
+            PlaySFX(clipBell, 0.8f, 1.3f);
+            bottomHintText.text = "ЗАКРЕПКА ЗАВЕРШЕНА! Перейдите к 4-му этапу: Полировка лоска.";
+        }
     }
 
     // =========================================================================
